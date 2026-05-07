@@ -6,11 +6,13 @@ name: Wasm Build
 on:
   push:
     branches:
+      - "wasm"
       - "wasm-*"
       - "feature/wasm"
       - "experimental/wasm"
   pull_request:
     branches:
+      - "wasm"
       - "wasm-*"
       - "feature/wasm"
       - "experimental/wasm"
@@ -39,9 +41,10 @@ jobs:
 
       - name: Verify Emscripten
         run: |
+          echo "Checking Emscripten installation..."
           emcc --version
           em++ --version
-          emcmake --version
+          emcmake cmake --version
           echo "Emscripten setup complete"
 
       - name: Install dependencies
