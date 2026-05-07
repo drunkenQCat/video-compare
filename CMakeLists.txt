@@ -31,21 +31,10 @@ add_compile_options(
 if(EMSCRIPTEN)
     message(STATUS "Platform: Emscripten (WebAssembly) detected")
     set(WASM_BUILD ON)
-    
-    # Wasm特定编译选项
+
+    # Wasm特定编译选项 (纯计算库,无需SDL2)
     add_compile_options(-O3)
-    
-    # Emscripten ports提供SDL2和SDL2_ttf
-    set(EMCC_FLAGS
-        "-s USE_SDL2=1"
-        "-s USE_SDL2_TTF=1"
-        "-s ALLOW_MEMORY_GROWTH=1"
-        "-s MAX_WEBGL_VERSION=2"
-        "-s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']"
-        "-s ENVIRONMENT='web'"
-    )
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${EMCC_FLAGS}")
-    
+
     # Wasm构建不包含FFmpeg
     add_definitions(-DWASM_BUILD)
     
@@ -112,10 +101,10 @@ endif()
 # 4. 库链接逻辑 (Pkg-config 选项)
 # =============================================================================
 
-# Wasm构建: 不链接FFmpeg,仅使用SDL2 (通过Emscripten ports)
+# Wasm构建: 纯计算库,无需FFmpeg或SDL2
 if(WASM_BUILD)
-    message(STATUS "Wasm build: excluding FFmpeg dependencies")
-    set(TARGET_LIBS SDL2_ttf SDL2)
+    message(STATUS "Wasm build: pure computation library (no external dependencies)")
+    set(TARGET_LIBS)
 else()
     set(TARGET_LIBS avformat avcodec avfilter avutil swscale swresample SDL2_ttf SDL2)
     
@@ -134,14 +123,12 @@ endif()
 # 5. 构建目标
 # =============================================================================
 
-# Wasm构建: 明确指定Wasm兼容的源文件
+# Wasm构建: 纯计算库,无GUI依赖
 if(WASM_BUILD)
-    message(STATUS "Wasm build: using explicit Wasm-compatible source list")
+    message(STATUS "Wasm build: using pure computation library (no GUI)")
     set(SOURCES
-        core_types.cpp
-        image_loader.cpp
-        main_wasm.cpp
-        display_wasm.cpp
+        wasm_comparer.cpp
+        wasm_main.cpp
     )
     message(STATUS "Wasm build sources: ${SOURCES}")
 else()
@@ -160,16 +147,16 @@ if(WASM_BUILD)
     set_target_properties(video-compare PROPERTIES
         SUFFIX ".js"
     )
-    
-    # 添加Emscripten链接标志
+
+    # 添加Emscripten链接标志 (使用Emscripten Bindings)
+    # 注意: 每个-s选项必须作为单个参数传递,格式为-sOPTION=value
     target_link_options(video-compare PRIVATE
-        -s USE_SDL2=1
-        -s USE_SDL2_TTF=1
-        -s ALLOW_MEMORY_GROWTH=1
-        -s MAX_WEBGL_VERSION=2
-        -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']
-        -s ENVIRONMENT='web'
-        -s EXPORT_NAME="VideoCompareModule"
+        -sALLOW_MEMORY_GROWTH=1
+        -sMAX_WEBGL_VERSION=2
+        -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']
+        -sENVIRONMENT='web'
+        -sEXPORT_NAME="VideoCompareModule"
+        -lembind
     )
 endif()
 

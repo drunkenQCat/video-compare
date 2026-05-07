@@ -37,7 +37,6 @@ jobs:
         with:
           version: "3.1.64"
           actions-cache-folder: "emsdk-cache"
-          use-cache: true
 
       - name: Verify Emscripten
         run: |
@@ -54,13 +53,6 @@ jobs:
             cmake \
             make \
             python3
-
-      - name: Download and setup Wasm dependencies
-        run: |
-          echo "Setting up Wasm-compatible dependencies..."
-          # Emscripten ports会自动下载SDL2和SDL2_ttf
-          echo "SDL2 and SDL2_ttf will be automatically handled by Emscripten ports"
-          echo "No FFmpeg needed - image-only build using stb_image"
 
       - name: Configure with CMake (Wasm)
         run: |
