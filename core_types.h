@@ -4,10 +4,13 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+
+#ifndef WASM_BUILD
 extern "C" {
 #include <libavutil/dict.h>
 #include <libavutil/frame.h>
 }
+#endif
 
 constexpr int64_t MAX_AVRATIONAL_REDUCE = 1024 * 1024;
 
@@ -74,6 +77,7 @@ extern const Side RIGHT;
 
 constexpr size_t SideCount = 2;  // For arrays that only have LEFT/RIGHT
 
+#ifndef WASM_BUILD
 inline std::string get_frame_key(const AVFrame* frame) {
   const AVDictionaryEntry* frame_key_entry = av_dict_get(frame->metadata, "frame_key", nullptr, 0);
   return frame_key_entry->value;
@@ -82,3 +86,4 @@ inline std::string get_frame_key(const AVFrame* frame) {
 inline void set_frame_key(AVFrame* frame, const std::string& frame_key) {
   av_dict_set(&frame->metadata, "frame_key", frame_key.c_str(), 0);
 }
+#endif

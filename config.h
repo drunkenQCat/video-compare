@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 #include "core_types.h"
+
+#ifndef WASM_BUILD
 #include "display.h"
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -12,6 +14,13 @@ struct TimeShiftConfig {
   AVRational multiplier{1, 1};
   int64_t offset_ms{0};
 };
+#else
+// Wasm版本: 简化的TimeShiftConfig (不使用AVRational)
+struct TimeShiftConfig {
+  float multiplier{1.0f};
+  int64_t offset_ms{0};
+};
+#endif
 
 struct ScopesConfig {
   bool histogram{false};
@@ -25,6 +34,7 @@ struct ScopesConfig {
   bool always_on_top{true};
 };
 
+#ifndef WASM_BUILD
 struct InputVideo {
   Side side;
   std::string side_description;
@@ -80,3 +90,17 @@ struct VideoCompareConfig {
 
   ScopesConfig scopes;
 };
+#else
+// Wasm版本: 简化的InputVideo和VideoCompareConfig
+struct InputVideo {
+  Side side;
+  std::string side_description;
+  std::string file_name;
+};
+
+struct VideoCompareConfig {
+  bool verbose{false};
+  int window_width{1280};
+  int window_height{720};
+};
+#endif

@@ -134,25 +134,16 @@ endif()
 # 5. 构建目标
 # =============================================================================
 
-# Wasm构建: 排除FFmpeg相关的源文件
+# Wasm构建: 明确指定Wasm兼容的源文件
 if(WASM_BUILD)
-    message(STATUS "Wasm build: selecting Wasm-compatible sources")
-    # 排除依赖FFmpeg的文件
-    set(EXCLUDE_SRCS
-        demuxer.cpp
-        video_decoder.cpp
-        video_filterer.cpp
-        video_filter_context.cpp
-        main.cpp  # 使用main_wasm.cpp替代
-        display.cpp  # 使用display_wasm.cpp替代
+    message(STATUS "Wasm build: using explicit Wasm-compatible source list")
+    set(SOURCES
+        core_types.cpp
+        image_loader.cpp
+        main_wasm.cpp
+        display_wasm.cpp
     )
-    
-    file(GLOB ALL_SRCS "*.cpp")
-    set(SOURCES ${ALL_SRCS})
-    list(REMOVE_ITEM SOURCES ${EXCLUDE_SRCS})
-    
-    # 添加Wasm特定的源文件
-    list(APPEND SOURCES image_loader.cpp main_wasm.cpp display_wasm.cpp)
+    message(STATUS "Wasm build sources: ${SOURCES}")
 else()
     # 自动查找所有 .cpp 文件 (对应 src = $(wildcard *.cpp))
     file(GLOB SOURCES "*.cpp")
