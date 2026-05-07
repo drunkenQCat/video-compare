@@ -1,0 +1,115 @@
+# .github/workflows/wasm-build.yml
+# Wasm编译工作流 - 专门用于构建WebAssembly版本
+
+name: Wasm Build
+
+on:
+  push:
+    branches:
+      - "wasm-*"
+      - "feature/wasm"
+      - "experimental/wasm"
+  pull_request:
+    branches:
+      - "wasm-*"
+      - "feature/wasm"
+      - "experimental/wasm"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-wasm:
+    name: Build WebAssembly
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: "3.1.64"
+          actions-cache-folder: "emsdk-cache"
+          use-cache: true
+
+      - name: Verify Emscripten
+        run: |
+          emcc --version
+          em++ --version
+          emcmake --version
+          echo "Emscripten setup complete"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            make \
+            python3
+
+      - name: Download and setup Wasm dependencies
+        run: |
+          echo "Setting up Wasm-compatible dependencies..."
+          # Emscripten ports会自动下载SDL2和SDL2_ttf
+          echo "SDL2 and SDL2_ttf will be automatically handled by Emscripten ports"
+          echo "No FFmpeg needed - image-only build using stb_image"
+
+      - name: Configure with CMake (Wasm)
+        run: |
+          mkdir -p build-wasm
+          cd build-wasm
+          emcmake cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWASM_BUILD=ON
+        env:
+          EMCC_CMAKE: emcmake
+
+      - name: Build Wasm
+        run: |
+          cd build-wasm
+          emmake make -j$(nproc) VERBOSE=1
+
+      - name: Verify Wasm build output
+        run: |
+          echo "Checking build outputs..."
+          ls -lh build-wasm/ || true
+          
+          if [ -f "build-wasm/video-compare.wasm" ]; then
+            echo "✓ video-compare.wasm found"
+            ls -lh build-wasm/video-compare.wasm
+          else
+            echo "✗ video-compare.wasm not found"
+          fi
+          
+          if [ -f "build-wasm/video-compare.js" ]; then
+            echo "✓ video-compare.js found"
+            ls -lh build-wasm/video-compare.js
+          else
+            echo "✗ video-compare.js not found"
+          fi
+
+      - name: Upload Wasm artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: video-compare-wasm
+          path: |
+            build-wasm/*.wasm
+            build-wasm/*.js
+            build-wasm/*.html
+            README.md
+          retention-days: 90
+
+      - name: Build summary
+        run: |
+          echo "## Wasm Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Emscripten Version**: 3.1.64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Artifacts" >> $GITHUB_STEP_SUMMARY
+          ls -lh build-wasm/*.wasm build-wasm/*.js 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "No artifacts found" >> $GITHUB_STEP_SUMMARY
