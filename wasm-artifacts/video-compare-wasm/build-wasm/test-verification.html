@@ -373,45 +373,44 @@
             const height = leftHeight;
             const size = width * height * 3;
 
-            // 分配内存
-            const leftPtr = Module._malloc(size);
-            const rightPtr = Module._malloc(size);
-
             try {
+                // 使用Module._compare_frames_js (extern "C" 导出)
+                // 需要在Wasm内存中分配缓冲区
+                const leftPtr = Module._malloc(size);
+                const rightPtr = Module._malloc(size);
+
                 // 复制数据到Wasm内存
                 Module.HEAPU8.set(leftImageData, leftPtr);
                 Module.HEAPU8.set(rightImageData, rightPtr);
 
-                log('info', `调用_compare_frames(${width}×${height})...`);
-
-                // 调用对比
                 const startTime = performance.now();
-                const result = Module._compare_frames(
+                const result = Module._compare_frames_js(
                     leftPtr,
                     rightPtr,
                     width,
                     height,
-                    0, 0
+                    0,  // diff_buffer = NULL
+                    0   // diff_size
                 );
                 const duration = (performance.now() - startTime).toFixed(2);
 
+                // 释放内存
+                Module._free(leftPtr);
+                Module._free(rightPtr);
+
                 log('success', `✅ 对比完成! 耗时: ${duration}ms`);
-                log('info', `返回值: ${result}`);
+                log('info', `SSIM: ${result.ssim.toFixed(4)}, PSNR: ${result.psnr.toFixed(2)} dB, MSE: ${result.mse.toFixed(2)}`);
 
                 // 显示结果
                 document.getElementById('metricsPanel').style.display = 'block';
-                document.getElementById('ssimValue').textContent = 'N/A';
-                document.getElementById('psnrValue').textContent = 'N/A';
-                document.getElementById('mseValue').textContent = 'N/A';
-                document.getElementById('sizeValue').textContent = `${width}×${height}`;
+                document.getElementById('ssimValue').textContent = result.ssim.toFixed(4);
+                document.getElementById('psnrValue').textContent = result.psnr.toFixed(2);
+                document.getElementById('mseValue').textContent = result.mse.toFixed(2);
+                document.getElementById('sizeValue').textContent = `${result.width}×${result.height}`;
 
             } catch (error) {
                 log('error', `❌ 对比失败: ${error.message}`);
                 console.error(error);
-            } finally {
-                // 释放内存
-                Module._free(leftPtr);
-                Module._free(rightPtr);
             }
         });
 

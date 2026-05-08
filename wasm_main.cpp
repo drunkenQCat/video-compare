@@ -64,7 +64,7 @@ void set_compare_config_js(long config_ptr) {
 
 // 使用Emscripten Bindings导出
 EMSCRIPTEN_BINDINGS(video_compare_module) {
-  
+
   // 导出CompareMetrics结构体
   value_object<CompareMetrics>("CompareMetrics")
     .field("ssim", &CompareMetrics::ssim)
@@ -80,9 +80,9 @@ EMSCRIPTEN_BINDINGS(video_compare_module) {
     .field("max_height", &CompareConfig::max_height)
     .field("block_size", &CompareConfig::block_size);
 
-  // 导出包装函数 (使用允许原始指针的策略)
-  function("compare_frames", &compare_frames, allow_raw_pointers());
-  function("set_compare_config", &set_compare_config, allow_raw_pointers());
+  // 导出包装函数 (使用val接收Uint8Array，避免原始指针问题)
+  function("compare_frames", &compare_frames_wrapper);
+  function("set_compare_config", &set_compare_config_wrapper);
   function("get_compare_config", &get_compare_config);
 }
 
