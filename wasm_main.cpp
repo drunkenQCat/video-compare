@@ -7,21 +7,19 @@
 
 using namespace emscripten;
 
-// 包装函数,使用val::global("Uint8Array")替代原始指针
+// 包装函数 - 接受Uint8Array,从HEAP中提取指针
 CompareMetrics compare_frames_wrapper(
   val left_js,
   val right_js,
   int width,
-  int height,
-  val diff_js
+  int height
 ) {
-  // 从JavaScript ArrayBuffer获取原生指针
-  uint8_t* left_rgb = reinterpret_cast<uint8_t*>(left_js.as<long>());
-  uint8_t* right_rgb = reinterpret_cast<uint8_t*>(right_js.as<long>());
-  uint8_t* diff_buffer = diff_js.isUndefined() ? nullptr : reinterpret_cast<uint8_t*>(diff_js.as<long>());
-  int diff_size = diff_js.isUndefined() ? 0 : diff_js["byteLength"].as<int>();
-  
-  return compare_frames(left_rgb, right_rgb, width, height, diff_buffer, diff_size);
+  // 从Uint8Array获取底层指针
+  // JavaScript传的是Uint8Array,embind会自动处理
+  uint8_t* left_rgb = reinterpret_cast<uint8_t*>(left_js["byteOffset"].as<long>());
+  uint8_t* right_rgb = reinterpret_cast<uint8_t*>(right_js["byteOffset"].as<long>());
+
+  return compare_frames(left_rgb, right_rgb, width, height, nullptr, 0);
 }
 
 void set_compare_config_wrapper(val config_js) {
@@ -29,35 +27,34 @@ void set_compare_config_wrapper(val config_js) {
   config.max_width = config_js["max_width"].as<int>();
   config.max_height = config_js["max_height"].as<int>();
   config.block_size = config_js["block_size"].as<int>();
-  
+
   set_compare_config(&config);
 }
 
-// 使用EMSCRIPTEN_KEEPALIVE导出C函数
+// 使用EMSCRIPTEN_KEEPALIVE导出C函数(用于需要手动内存管理的场景)
 extern "C" {
 
 EMSCRIPTEN_KEEPALIVE
-CompareMetrics compare_frames_js(
-  long left_ptr,
-  long right_ptr,
+void* compare_frames_ptr(
+  const uint8_t* left_ptr,
+  const uint8_t* right_ptr,
   int width,
   int height,
-  long diff_ptr,
-  int diff_size
+  int* out_result_size
 ) {
-  return compare_frames(
-    reinterpret_cast<const uint8_t*>(left_ptr),
-    reinterpret_cast<const uint8_t*>(right_ptr),
-    width,
-    height,
-    diff_ptr ? reinterpret_cast<uint8_t*>(diff_ptr) : nullptr,
-    diff_size
-  );
+  CompareMetrics result = compare_frames(left_ptr, right_ptr, width, height, nullptr, 0);
+  
+  // 将结果复制到堆内存,返回指针
+  CompareMetrics* heap_result = new CompareMetrics(result);
+  if (out_result_size) {
+    *out_result_size = sizeof(CompareMetrics);
+  }
+  return heap_result;
 }
 
 EMSCRIPTEN_KEEPALIVE
-void set_compare_config_js(long config_ptr) {
-  set_compare_config(reinterpret_cast<const CompareConfig*>(config_ptr));
+void free_metrics_ptr(void* ptr) {
+  delete static_cast<CompareMetrics*>(ptr);
 }
 
 }  // extern "C"
@@ -80,9 +77,8 @@ EMSCRIPTEN_BINDINGS(video_compare_module) {
     .field("max_height", &CompareConfig::max_height)
     .field("block_size", &CompareConfig::block_size);
 
-  // 导出包装函数 (使用val接收Uint8Array，避免原始指针问题)
+  // 导出包装函数 - 直接使用Uint8Array
   function("compare_frames", &compare_frames_wrapper);
-  function("set_compare_config", &set_compare_config_wrapper);
   function("get_compare_config", &get_compare_config);
 }
 
