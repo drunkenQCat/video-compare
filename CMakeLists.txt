@@ -153,7 +153,7 @@ if(WASM_BUILD)
     target_link_options(video-compare PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sMAX_WEBGL_VERSION=2
-        -sEXPORTED_FUNCTIONS=['_malloc','_free','_compare_frames_js','_set_compare_config_js']
+        -sEXPORTED_FUNCTIONS=['_malloc','_free']
         -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']
         -sENVIRONMENT='web'
         -sEXPORT_NAME="VideoCompareModule"
