@@ -17,7 +17,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.cjs.json && mv dist/index.js dist/index.cjs && tsc -p tsconfig.esm.json && mv dist/index.js dist/index.mjs && mv dist/index.cjs dist/index.js && tsc --emitDeclarationOnly --outDir dist",
+    "build": "bash build.sh",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
