@@ -27,3 +27,4 @@ video-compare
 # PNG files
 *.png
 
+wasm-artifacts

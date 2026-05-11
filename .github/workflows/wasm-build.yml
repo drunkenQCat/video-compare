@@ -88,6 +88,12 @@ jobs:
             echo "✗ video-compare.js not found"
           fi
 
+      - name: Test Wasm bindings
+        run: |
+          echo "Running Wasm binding tests..."
+          node --version
+          node tests/wasm/test_bindings.cjs ./build-wasm
+
       - name: Upload Wasm artifacts
         uses: actions/upload-artifact@v7
         with:
