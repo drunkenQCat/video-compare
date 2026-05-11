@@ -211,9 +211,15 @@ if (!fs.existsSync(WASM_ENTRY)) {
 // 删除缓存, 重新加载
 delete require.cache[require.resolve(WASM_ENTRY)];
 
-// Emscripten 使用 PROMISE 或无 MODULARIZE 的同步加载
-// 策略: 如果 require 返回 Promise, 则 await; 否则直接用
-
+/**
+ * 加载并等待 Wasm 初始化。
+ *
+ * Emscripten 3.1.x 在 `-sENVIRONMENT='web,node'` `MODULARIZE=0` 模式下:
+ *   - require() 同步返回 Module 对象 (EXPORT_NAME=VideoCompareModule)
+ *   - WASM 编译/实例化是异步的
+ *   - 完成后触发 Module.onRuntimeInitialized()
+ *   - embind 绑定在实例化后注册
+ */
 async function loadModule() {
     let raw;
     try {
@@ -225,36 +231,55 @@ async function loadModule() {
 
     let Module = raw;
 
-    // Emscripten 3.x 无 MODULARIZE 时, require 返回 Promise
+    // Emscripten 3.x 可能返回 Promise (取决于 MODULARIZE 设置)
     if (raw && typeof raw.then === 'function') {
         console.log('Emscripten 返回 Promise, 等待初始化...');
         Module = await raw;
     }
 
-    // 如果设置了 EXPORT_NAME (CMakeLists.txt: VideoCompareModule)
-    if (Module.VideoCompareModule) {
-        Module = Module.VideoCompareModule;
-    }
+    // 解包 EXPORT_NAME / .default
+    if (Module.VideoCompareModule) Module = Module.VideoCompareModule;
+    if (Module.default && typeof Module.default === 'object') Module = Module.default;
 
-    // 可能还需要一层 .default (ESM interop)
-    if (Module.default && typeof Module.default === 'object') {
-        Module = Module.default;
+    // 等待 Wasm 实例化完成
+    if (!Module.HEAPU8) {
+        console.log('等待 Wasm 初始化 (onRuntimeInitialized)...');
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Wasm 初始化超时 (15s)')), 15000);
+            // onRuntimeInitialized 可能在 require 前已触发 → 直接 resolve
+            if (Module.HEAPU8) {
+                clearTimeout(timeout);
+                return resolve();
+            }
+            const orig = Module.onRuntimeInitialized;
+            Module.onRuntimeInitialized = () => {
+                clearTimeout(timeout);
+                if (orig) orig();
+                resolve();
+            };
+        });
     }
 
     return Module;
 }
 
 (async function main() {
-    let Module = await loadModule();
+    let Module;
+    try {
+        Module = await loadModule();
+    } catch (e) {
+        console.error(`❌ 加载失败: ${e.message}`);
+        process.exit(1);
+    }
 
     console.log(`Module 类型: ${typeof Module}`);
     console.log(`compare_frames: ${typeof Module.compare_frames}`);
     console.log(`_malloc:         ${typeof Module._malloc}`);
-    console.log(`HEAPU8:          ${Module.HEAPU8 ? 'OK' : 'MISSING'}`);
-    console.log(`HEAPF32:         ${Module.HEAPF32 ? 'OK' : 'MISSING'}`);
+    console.log(`HEAPU8:          ${Module.HEAPU8 ? 'OK (len=' + Module.HEAPU8.length + ')' : 'MISSING'}`);
+    console.log(`HEAPF32:         ${Module.HEAPF32 ? 'OK (len=' + Module.HEAPF32.length + ')' : 'MISSING'}`);
 
-    if (!Module.HEAPU8) {
-        console.error('❌ HEAPU8 不可用 — Wasm 未完成初始化');
+    if (!Module.HEAPU8 || typeof Module.compare_frames !== 'function') {
+        console.error('❌ Wasm 初始化不完整');
         process.exit(1);
     }
 
