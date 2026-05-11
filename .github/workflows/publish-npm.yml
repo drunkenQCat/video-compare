@@ -28,6 +28,12 @@ jobs:
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+          scope: "@video-compare"
+
+      - name: Setup NPM auth
+        working-directory: npm-package
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
 
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
