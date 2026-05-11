@@ -1,19 +1,15 @@
 /**
  * Video Compare WebAssembly Library
- * 
+ *
  * 纯计算库，用于实时对比两帧图像的相似度
- * 输出SSIM、PSNR、MSE指标及分块差异数据
+ * 输出SSIM、PSNR/MSE指标
  */
-
-// 动态导入Emscripten生成的loader
-// @ts-ignore
-import VideoCompareModule from './video-compare.js';
 
 export interface CompareInput {
   /** 左帧RGB数据 (width × height × 3 bytes) */
-  left: ArrayBuffer | Uint8Array;
+  left: Uint8Array | ArrayBuffer;
   /** 右帧RGB数据 (width × height × 3 bytes) */
-  right: ArrayBuffer | Uint8Array;
+  right: Uint8Array | ArrayBuffer;
   /** 图像宽度 */
   width: number;
   /** 图像高度 */
@@ -21,277 +17,181 @@ export interface CompareInput {
 }
 
 export interface CompareMetrics {
-  /** 
-   * 结构相似度指数 (0-1)
-   * 1 = 完全相同, 0 = 完全不同
-   * > 0.95 表示极好, < 0.70 表示较差
-   */
+  /** 结构相似度指数 (0-1) */
   ssim: number;
-  
-  /** 
-   * 峰值信噪比 (dB)
-   * 越高表示质量越好
-   * > 40dB 表示极好, < 25dB 表示较差
-   */
+  /** 峰值信噪比 (dB) */
   psnr: number;
-  
-  /** 
-   * 均方误差
-   * 越低表示差异越小
-   * < 10 表示极好, > 200 表示较差
-   */
+  /** 均方误差 */
   mse: number;
-  
-  /** 实际处理的宽度（可能因降采样而缩小） */
+  /** 实际处理的宽度 */
   width: number;
-  
-  /** 实际处理的高度（可能因降采样而缩小） */
+  /** 实际处理的高度 */
   height: number;
-  
-  /** 是否进行了降采样处理 */
+  /** 是否进行了降采样 */
   downsampled: boolean;
-  
-  /** 
-   * 可选：分块差异数据
-   * 仅当compare()的includeDiff=true时返回
-   * 每个元素代表一个16×16块的MSE值
-   */
-  diff?: Float32Array;
 }
 
 export interface CompareConfig {
-  /** 最大处理宽度，超过此尺寸自动降采样 (默认: 1920) */
+  /** 最大处理宽度 (默认: 1920) */
   maxWidth?: number;
-  /** 最大处理高度，超过此尺寸自动降采样 (默认: 1080) */
+  /** 最大处理高度 (默认: 1080) */
   maxHeight?: number;
-  /** 分块大小，用于差异计算 (默认: 16) */
+  /** 分块大小 (默认: 16) */
   blockSize?: number;
 }
 
+/* ── Emscripten 模块类型 (minimal) ── */
+interface WasmModule {
+  compare_frames: (
+    leftView: Uint8Array,
+    rightView: Uint8Array,
+    width: number,
+    height: number
+  ) => CompareMetrics;
+  set_compare_config: (cfg: {
+    max_width: number;
+    max_height: number;
+    block_size: number;
+  }) => void;
+  get_compare_config: () => {
+    max_width: number;
+    max_height: number;
+    block_size: number;
+  };
+  _malloc: (size: number) => number;
+  _free: (ptr: number) => void;
+  HEAPU8: Uint8Array;
+  HEAPF32: Float32Array;
+  onRuntimeInitialized?: () => void;
+}
+
+/* ── 动态加载 Wasm loader (.js) ── */
+async function loadWasmModule(): Promise<WasmModule> {
+  // 浏览器: 通过 <script> 标签, Module 挂在 window 上
+  // Node.js: require() 返回 Module 或 Promise
+
+  // @ts-ignore — 由 bundler 或用户自行处理
+  if (typeof VideoCompareModule !== 'undefined') {
+    // @ts-ignore
+    const m = await VideoCompareModule();
+    return m as WasmModule;
+  }
+
+  // @ts-ignore
+  if (typeof Module !== 'undefined') {
+    // @ts-ignore
+    const m = await Module();
+    return m as WasmModule;
+  }
+
+  throw new Error(
+    'VideoCompareModule not found. Ensure video-compare.js is loaded before calling VideoComparer.create()'
+  );
+}
+
+/* ── 工具函数 ── */
+function copyToWasm(mod: WasmModule, data: Uint8Array): [number, Uint8Array] | null {
+  const ptr = mod._malloc(data.length);
+  if (!ptr) return null;
+  mod.HEAPU8.set(data, ptr);
+  return [ptr, mod.HEAPU8.subarray(ptr, ptr + data.length)];
+}
+
+function toUint8Array(buf: Uint8Array | ArrayBuffer): Uint8Array {
+  if (buf instanceof Uint8Array) return buf;
+  return new Uint8Array(buf);
+}
+
 /**
- * VideoComparer - WebAssembly视频帧对比库
- * 
- * 使用示例:
+ * VideoComparer — WebAssembly 图片对比封装
+ *
  * ```typescript
  * const comparer = await VideoComparer.create();
- * const metrics = await comparer.compare({
- *   left: leftFrameRGB,
- *   right: rightFrameRGB,
- *   width: 1920,
- *   height: 1080
- * });
- * console.log(metrics.ssim, metrics.psnr, metrics.mse);
+ * const metrics = await comparer.compare({ left, right, width, height });
  * comparer.dispose();
  * ```
  */
 export class VideoComparer {
-  private module: any;
+  private mod: WasmModule | null = null;
   private disposed = false;
   private config: Required<CompareConfig>;
 
-  private constructor(module: any, config: Required<CompareConfig>) {
-    this.module = module;
-    this.config = config;
+  private constructor(cfg: Required<CompareConfig>) {
+    this.config = cfg;
   }
 
-  /**
-   * 创建VideoComparer实例（异步加载Wasm模块）
-   * @param config 可选配置参数
-   * @returns VideoComparer实例
-   */
+  /** 创建实例 (异步加载 Wasm) */
   static async create(config?: CompareConfig): Promise<VideoComparer> {
-    const defaultConfig: Required<CompareConfig> = {
+    const merged: Required<CompareConfig> = {
       maxWidth: config?.maxWidth ?? 1920,
       maxHeight: config?.maxHeight ?? 1080,
-      blockSize: config?.blockSize ?? 16
+      blockSize: config?.blockSize ?? 16,
     };
-
-    try {
-      // 加载Wasm模块
-      const module = await VideoCompareModule();
-
-      // 创建实例
-      const comparer = new VideoComparer(module, defaultConfig);
-
-      // 应用配置
-      comparer.applyConfig();
-
-      return comparer;
-    } catch (error) {
-      throw new Error(`Failed to load VideoCompare Wasm: ${error instanceof Error ? error.message : error}`);
-    }
+    const instance = new VideoComparer(merged);
+    instance.mod = await loadWasmModule();
+    instance.applyConfig();
+    return instance;
   }
 
-  /**
-   * 对比两帧图像
-   * @param input 输入参数（左右帧数据及尺寸）
-   * @param includeDiff 是否返回分块差异数据（默认false，性能更好）
-   * @returns 对比指标
-   * @throws 如果输入无效或实例已释放
-   */
-  async compare(input: CompareInput, includeDiff = false): Promise<CompareMetrics> {
-    // 检查实例状态
-    if (this.disposed) {
-      throw new Error('VideoComparer has been disposed. Create a new instance.');
-    }
-
-    // 验证输入
-    this.validateInput(input);
-
-    // 转换为Uint8Array
-    const leftData = this.toUint8Array(input.left);
-    const rightData = this.toUint8Array(input.right);
-
-    // 计算diff buffer大小（如果需要）
-    let diffBufferPtr = 0;
-    let diffBufferSize = 0;
-    let blocksX = 0;
-    let blocksY = 0;
-
-    if (includeDiff) {
-      blocksX = Math.ceil(input.width / this.config.blockSize);
-      blocksY = Math.ceil(input.height / this.config.blockSize);
-      diffBufferSize = blocksX * blocksY * 4; // float = 4 bytes
-      diffBufferPtr = this.module._malloc(diffBufferSize);
-
-      if (diffBufferPtr === 0) {
-        throw new Error('Failed to allocate memory for diff buffer');
-      }
-    }
-
-    try {
-      // 调用Wasm对比函数
-      const metrics = this.module.compare_frames(
-        leftData.byteOffset,
-        rightData.byteOffset,
-        input.width,
-        input.height,
-        diffBufferPtr,
-        diffBufferSize
-      );
-
-      // 构建结果对象
-      const result: CompareMetrics = {
-        ssim: metrics.ssim,
-        psnr: metrics.psnr,
-        mse: metrics.mse,
-        width: metrics.width,
-        height: metrics.height,
-        downsampled: Boolean(metrics.downsampled)
-      };
-
-      // 读取diff数据（如果需要）
-      if (includeDiff && diffBufferPtr > 0) {
-        const diffData = new Float32Array(
-          this.module.HEAPF32.buffer,
-          diffBufferPtr,
-          blocksX * blocksY
-        );
-
-        // 复制数据（避免后续_free后内存失效）
-        result.diff = new Float32Array(diffData);
-      }
-
-      return result;
-    } finally {
-      // 释放diff buffer内存
-      if (diffBufferPtr > 0) {
-        this.module._free(diffBufferPtr);
-      }
-    }
-  }
-
-  /**
-   * 更新配置参数
-   * @param config 新配置参数
-   */
-  setConfig(config: Partial<CompareConfig>): void {
-    if (this.disposed) {
+  /** 对比两帧 */
+  async compare(input: CompareInput): Promise<CompareMetrics> {
+    if (this.disposed || !this.mod)
       throw new Error('VideoComparer has been disposed');
-    }
 
+    const left = toUint8Array(input.left);
+    const right = toUint8Array(input.right);
+    const expected = input.width * input.height * 3;
+    if (left.length !== expected)
+      throw new Error(`Left buffer size mismatch. Expected ${expected}, got ${left.length}`);
+    if (right.length !== expected)
+      throw new Error(`Right buffer size mismatch. Expected ${expected}, got ${right.length}`);
+
+    const la = copyToWasm(this.mod, left);
+    const ra = copyToWasm(this.mod, right);
+    if (!la || !ra) throw new Error('_malloc failed — Wasm heap may be full');
+
+    try {
+      return this.mod.compare_frames(la[1], ra[1], input.width, input.height);
+    } finally {
+      this.mod._free(la[0]);
+      this.mod._free(ra[0]);
+    }
+  }
+
+  /** 更新配置 */
+  setConfig(config: Partial<CompareConfig>): void {
+    if (this.disposed || !this.mod) throw new Error('VideoComparer has been disposed');
     if (config.maxWidth !== undefined) this.config.maxWidth = config.maxWidth;
     if (config.maxHeight !== undefined) this.config.maxHeight = config.maxHeight;
     if (config.blockSize !== undefined) this.config.blockSize = config.blockSize;
-
     this.applyConfig();
   }
 
-  /**
-   * 获取当前配置
-   */
+  /** 获取当前配置 */
   getConfig(): Readonly<Required<CompareConfig>> {
     return { ...this.config };
   }
 
-  /**
-   * 释放Wasm资源
-   * 调用后实例不可再使用
-   */
+  /** 释放资源 */
   dispose(): void {
     if (!this.disposed) {
-      this.module = null;
+      this.mod = null;
       this.disposed = true;
     }
   }
 
-  /**
-   * 检查实例是否已释放
-   */
   get isDisposed(): boolean {
     return this.disposed;
   }
 
-  // ========== 私有方法 ==========
-
-  /**
-   * 验证输入参数
-   */
-  private validateInput(input: CompareInput): void {
-    if (!input.left || !input.right) {
-      throw new Error('left and right buffers are required');
-    }
-
-    if (input.width <= 0 || input.height <= 0) {
-      throw new Error(`Invalid dimensions: ${input.width}×${input.height}. Width and height must be positive.`);
-    }
-
-    const expectedSize = input.width * input.height * 3; // RGB = 3 bytes per pixel
-
-    if (input.left.byteLength !== expectedSize) {
-      throw new Error(
-        `Left buffer size mismatch. Expected: ${expectedSize}, Got: ${input.left.byteLength}`
-      );
-    }
-
-    if (input.right.byteLength !== expectedSize) {
-      throw new Error(
-        `Right buffer size mismatch. Expected: ${expectedSize}, Got: ${input.right.byteLength}`
-      );
-    }
-  }
-
-  /**
-   * 转换为Uint8Array
-   */
-  private toUint8Array(buffer: ArrayBuffer | Uint8Array): Uint8Array {
-    if (buffer instanceof Uint8Array) {
-      return buffer;
-    }
-    return new Uint8Array(buffer);
-  }
-
-  /**
-   * 应用配置到Wasm模块
-   */
   private applyConfig(): void {
-    this.module.set_compare_config({
+    if (!this.mod) return;
+    this.mod.set_compare_config({
       max_width: this.config.maxWidth,
       max_height: this.config.maxHeight,
-      block_size: this.config.blockSize
+      block_size: this.config.blockSize,
     });
   }
 }
 
-// 默认导出
 export default VideoComparer;

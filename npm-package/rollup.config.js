@@ -17,7 +17,8 @@ export default [
         useTsconfigDeclarationDir: true
       })
     ],
-    external: []
+    // 不打包 .wasm / .js (Emscripten loader)，让用户自行加载
+    external: [/\.wasm$/, /video-compare\.js$/]
   },
   // ES Modules bundle
   {
@@ -34,6 +35,6 @@ export default [
         useTsconfigDeclarationDir: true
       })
     ],
-    external: []
+    external: [/\.wasm$/, /video-compare\.js$/]
   }
 ];
