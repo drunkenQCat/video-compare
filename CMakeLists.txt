@@ -155,7 +155,7 @@ if(WASM_BUILD)
         -sMAX_WEBGL_VERSION=2
         -sEXPORTED_FUNCTIONS=['_malloc','_free']
         -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','FS']
-        -sENVIRONMENT='web'
+        -sENVIRONMENT=['web','node']
         -sEXPORT_NAME="VideoCompareModule"
         -lembind
     )
