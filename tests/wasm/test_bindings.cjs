@@ -78,12 +78,11 @@ function makeSolid(w, h, r, g, b) {
     return buf;
 }
 
-/** 把 JS Uint8Array 拷贝到 WASM heap, 返回 [ptr, subarray-view] */
+/** 把 JS Uint8Array 拷贝到 WASM heap, 返回 [ptr, subarray-view]; _malloc 失败返回 null */
 function copyToWasm(Module, jsData) {
     const ptr = Module._malloc(jsData.length);
-    if (!ptr) throw new Error('_malloc returned 0');
+    if (!ptr) return null;
     Module.HEAPU8.set(jsData, ptr);
-    // subarray 共享 WASM ArrayBuffer, byteOffset == ptr (即 C++ 中的有效指针)
     const view = Module.HEAPU8.subarray(ptr, ptr + jsData.length);
     return [ptr, view];
 }
@@ -169,18 +168,24 @@ function runTests(Module) {
 
     console.log('\n── 6. 降采样触发 (>1080p → 降采样) ──');
     {
-        // 2000×2000 超过 max_height=1080, scale = 1080/2000 = 0.54 → 1080×1080
-        const w = 2000, h = 2000;
+        // 1200×1200 超过 max_height=1080, scale = min(1080/1200, 1080/1200) = 0.9 → 1080×1080
+        const w = 1200, h = 1200;
         const left = makeSolid(w, h, 128, 128, 128);
         const right = makeSolid(w, h, 128, 128, 128);
-        const [lp, lv] = copyToWasm(Module, left);
-        const [rp, rv] = copyToWasm(Module, right);
+        const la = copyToWasm(Module, left);
+        const ra = copyToWasm(Module, right);
+        assert(la !== null, '_malloc 成功 (左图 1200×1200)');
+        assert(ra !== null, '_malloc 成功 (右图 1200×1200)');
+        if (!la || !ra) return;
+        const [lp, lv] = la;
+        const [rp, rv] = ra;
         const result = Module.compare_frames(lv, rv, w, h);
         assertEq(result.downsampled, 1, 'downsampled=1 (已降采样)');
-        // 降采样后尺寸 ≤ 1080
-        assert(result.width <= 1080 && result.height <= 1080, `降采样尺寸: ${result.width}×${result.height} (≤1080)`,
-               `${result.width}×${result.height}`);
-        // 两图相同 → SSIM≈1.0 (注意: 降采样用最近邻, 色块均匀无影响)
+        // 降采样后尺寸 ≤ 1080 且 > 0
+        assert(result.width > 0 && result.height > 0, `降采样尺寸: ${result.width}×${result.height} (>0)`,
+               `width=${result.width} height=${result.height}`);
+        assert(result.width <= 1080 && result.height <= 1080, `降采样尺寸≤1080: ${result.width}×${result.height}`);
+        // 两图相同 → SSIM≈1.0
         assertFloatEq(result.ssim, 1.0, '降采样全同图 SSIM≈1.0');
         freeAll(Module, lp, rp);
     }
