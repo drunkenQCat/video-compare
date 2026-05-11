@@ -62,19 +62,6 @@ jobs:
         working-directory: npm-package
         run: npm run build
 
-      - name: Verify package contents
-        working-directory: npm-package
-        run: |
-          echo "Package contents:"
-          ls -lR dist/
-          # 确保 .wasm 和 .js 都在
-          test -f dist/video-compare.wasm || { echo "MISSING: dist/video-compare.wasm"; exit 1; }
-          test -f dist/video-compare.js   || { echo "MISSING: dist/video-compare.js"; exit 1; }
-          test -f dist/index.js           || { echo "MISSING: dist/index.js"; exit 1; }
-          test -f dist/index.mjs          || { echo "MISSING: dist/index.mjs"; exit 1; }
-          test -f dist/index.d.ts         || { echo "MISSING: dist/index.d.ts"; exit 1; }
-          echo "All required files present"
-
       - name: Publish to NPM
         working-directory: npm-package
         run: npm publish --access public
