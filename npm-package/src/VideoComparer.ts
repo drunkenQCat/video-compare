@@ -87,7 +87,7 @@ async function loadWasmModule(): Promise<WasmModule> {
 
   // 尝试动态 import (Vite 等 bundler 环境)
   // @ts-ignore
-  if (typeof import === 'function' && typeof document !== 'undefined') {
+  if (typeof document !== 'undefined') {
     try {
       // @ts-ignore
       const m = await import('video-compare.js');
