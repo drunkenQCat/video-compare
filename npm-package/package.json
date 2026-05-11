@@ -1,5 +1,5 @@
 {
-  "name": "@video-compare/wasm",
+  "name": "@cfai/video-compare",
   "version": "1.0.0",
   "description": "WebAssembly library for real-time image frame comparison (SSIM/PSNR/MSE)",
   "main": "dist/index.js",

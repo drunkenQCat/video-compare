@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
-          scope: "@video-compare"
+          scope: "@cfai"
 
       - name: Setup NPM auth
         working-directory: npm-package

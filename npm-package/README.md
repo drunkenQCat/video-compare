@@ -1,13 +1,13 @@
-# @video-compare/wasm
+# @cfai/video-compare
 
 > WebAssembly library for real-time image frame comparison (SSIM/PSNR/MSE)
 
-[![npm version](https://badge.fury.io/js/@video-compare%2Fwasm.svg)](https://badge.fury.io/js/@video-compare%2Fwasm)
+[![npm version](https://badge.fury.io/js/@cfai%2Fvideo-compare.svg)](https://badge.fury.io/js/@cfai%2Fvideo-compare)
 
 ## Installation
 
 ```bash
-npm install @video-compare/wasm
+npm install @cfai/video-compare
 ```
 
 ## Usage
