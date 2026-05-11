@@ -69,8 +69,9 @@ interface WasmModule {
 async function loadWasmModule(): Promise<WasmModule> {
   // 浏览器: 通过 <script> 标签, Module 挂在 window 上
   // Node.js: require() 返回 Module 或 Promise
+  // Vite/bundler: 直接 import video-compare.js
 
-  // @ts-ignore — 由 bundler 或用户自行处理
+  // @ts-ignore
   if (typeof VideoCompareModule !== 'undefined') {
     // @ts-ignore
     const m = await VideoCompareModule();
@@ -82,6 +83,20 @@ async function loadWasmModule(): Promise<WasmModule> {
     // @ts-ignore
     const m = await Module();
     return m as WasmModule;
+  }
+
+  // 尝试动态 import (Vite 等 bundler 环境)
+  // @ts-ignore
+  if (typeof import === 'function' && typeof document !== 'undefined') {
+    try {
+      // @ts-ignore
+      const m = await import('video-compare.js');
+      const mod = m.default || m.VideoCompareModule || m;
+      if (typeof mod === 'function') return await mod();
+      if (mod && mod.compare_frames) return mod as WasmModule;
+    } catch {
+      // 忽略, 继续尝试其他方式
+    }
   }
 
   throw new Error(

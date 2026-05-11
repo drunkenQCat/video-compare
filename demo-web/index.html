@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>视频实时对比 — @cfai/video-compare</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>🎬 视频实时对比</h1>
+      <p class="sub">基于 WebCodecs + @cfai/video-compare Wasm</p>
+    </header>
+
+    <!-- 上传区 -->
+    <section class="upload">
+      <div class="upload-box" id="leftBox">
+        <input type="file" id="leftInput" accept="video/mp4,video/webm,video/*">
+        <span class="icon">📹</span>
+        <p><strong>左视频</strong></p>
+        <p class="hint" id="leftHint">点击上传 MP4/WebM</p>
+      </div>
+      <div class="upload-box" id="rightBox">
+        <input type="file" id="rightInput" accept="video/mp4,video/webm,video/*">
+        <span class="icon">📹</span>
+        <p><strong>右视频</strong></p>
+        <p class="hint" id="rightHint">点击上传 MP4/WebM</p>
+      </div>
+    </section>
+
+    <!-- 控制栏 -->
+    <section class="controls" id="controls" style="display:none;">
+      <button id="playBtn">▶ 播放</button>
+      <button id="pauseBtn" disabled>⏸ 暂停</button>
+      <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1">
+      <span id="timeDisplay">0:00 / 0:00</span>
+    </section>
+
+    <!-- 视频区 -->
+    <section class="videos" id="videoSection" style="display:none;">
+      <div class="video-panel">
+        <video id="leftVideo" muted playsinline></video>
+        <div class="label">左</div>
+      </div>
+      <div class="video-panel">
+        <video id="rightVideo" muted playsinline></video>
+        <div class="label">右</div>
+      </div>
+    </section>
+
+    <!-- Canvas 对比区 -->
+    <section id="compareSection" style="display:none;">
+      <h2>对比结果</h2>
+      <div class="compare-grid">
+        <div class="panel">
+          <h3>像素差异</h3>
+          <canvas id="diffCanvas"></canvas>
+        </div>
+        <div class="panel">
+          <h3>块级热力图</h3>
+          <canvas id="heatCanvas"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Metrics -->
+    <section id="metricsSection" style="display:none;">
+      <div class="metrics">
+        <div class="metric"><div class="mv" id="ssimV">-</div><div class="ml">SSIM</div></div>
+        <div class="metric"><div class="mv" id="psnrV">-</div><div class="ml">PSNR (dB)</div></div>
+        <div class="metric"><div class="mv" id="mseV">-</div><div class="ml">MSE</div></div>
+        <div class="metric"><div class="mv" id="fpsV">-</div><div class="ml">对比 FPS</div></div>
+      </div>
+      <canvas id="chartCanvas" height="80"></canvas>
+    </section>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
