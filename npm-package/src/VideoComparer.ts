@@ -67,17 +67,13 @@ interface WasmModule {
 
 /* ── 动态加载 Wasm loader (.js) ── */
 async function loadWasmModule(): Promise<WasmModule> {
-  // 浏览器: 通过 <script> 标签, Module 挂在 window 上
-  // Node.js: require() 返回 Module 或 Promise
-  // Vite/bundler: 直接 import video-compare.js
-
+  // 1. 检查全局 (script 标签加载)
   // @ts-ignore
   if (typeof VideoCompareModule !== 'undefined') {
     // @ts-ignore
     const m = await VideoCompareModule();
     return m as WasmModule;
   }
-
   // @ts-ignore
   if (typeof Module !== 'undefined') {
     // @ts-ignore
@@ -85,23 +81,30 @@ async function loadWasmModule(): Promise<WasmModule> {
     return m as WasmModule;
   }
 
-  // 尝试动态 import (Vite 等 bundler 环境)
-  // @ts-ignore
+  // 2. 浏览器环境: fetch JS loader + eval (绕过 bundler exports 限制)
   if (typeof document !== 'undefined') {
-    try {
-      // @ts-ignore
-      const m = await import('video-compare.js');
-      const mod = m.default || m.VideoCompareModule || m;
-      if (typeof mod === 'function') return await mod();
-      if (mod && mod.compare_frames) return mod as WasmModule;
-    } catch {
-      // 忽略, 继续尝试其他方式
-    }
+    return new Promise<WasmModule>((resolve, reject) => {
+      const script = document.createElement('script');
+      // 尝试从同目录加载 (npm package dist/)
+      script.src = new URL('video-compare.js', import.meta.url).href;
+      script.onload = () => {
+        // @ts-ignore
+        const m = (typeof VideoCompareModule !== 'undefined')
+          // @ts-ignore
+          ? VideoCompareModule()
+          // @ts-ignore
+          : (typeof Module !== 'undefined' ? Module() : null);
+        if (m) resolve(m);
+        else reject(new Error('VideoCompareModule not registered after script load'));
+      };
+      script.onerror = () => reject(new Error(
+        'Failed to load video-compare.js. Ensure the .js and .wasm files are in the same directory as index.mjs'
+      ));
+      document.head.appendChild(script);
+    });
   }
 
-  throw new Error(
-    'VideoCompareModule not found. Ensure video-compare.js is loaded before calling VideoComparer.create()'
-  );
+  throw new Error('VideoCompareModule not found. Ensure video-compare.js is accessible.');
 }
 
 /* ── 工具函数 ── */

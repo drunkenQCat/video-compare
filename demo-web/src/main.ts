@@ -1,6 +1,4 @@
 import { VideoComparer } from '@cfai/video-compare';
-// 加载 Emscripten loader (注册 VideoCompareModule 到全局)
-import '@cfai/video-compare/dist/video-compare.js';
 
 /* ── 全局状态 ── */
 let comparer: VideoComparer | null = null;
