@@ -53,13 +53,6 @@ jobs:
           emcmake cmake .. -DCMAKE_BUILD_TYPE=Release -DWASM_BUILD=ON
           emmake make -j$(nproc)
 
-      - name: Copy Wasm to npm-package/dist
-        run: |
-          mkdir -p npm-package/dist
-          cp build-wasm/video-compare.js npm-package/dist/
-          cp build-wasm/video-compare.wasm npm-package/dist/
-          ls -lh npm-package/dist/
-
       - name: Install npm dependencies
         working-directory: npm-package
         run: npm install
@@ -68,9 +61,15 @@ jobs:
         working-directory: npm-package
         run: npm run build
 
+      - name: Copy Wasm to npm-package/dist (after build)
+        run: |
+          cp build-wasm/video-compare.js npm-package/dist/
+          cp build-wasm/video-compare.wasm npm-package/dist/
+          ls -lh npm-package/dist/
+
       - name: Publish to NPM
         working-directory: npm-package
-        run: npm publish --access public
+        run: npm publish --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
