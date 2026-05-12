@@ -8,7 +8,7 @@ export default defineConfig({
     target: 'es2020',
   },
   optimizeDeps: {
-    include: ['@cfai/video-compare'],
+    exclude: ['@cfai/video-compare'],
   },
   assetsInclude: ['**/*.wasm'],
 });

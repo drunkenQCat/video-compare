@@ -68,7 +68,6 @@ function setupControls() {
   const seekBar = document.getElementById('seekBar') as HTMLInputElement;
 
   playBtn.addEventListener('click', async () => {
-    if (!comparer) return;
     await Promise.all([leftVideo.play(), rightVideo.play()]);
     running = true;
     playBtn.disabled = true;
@@ -95,7 +94,7 @@ function setupControls() {
 
 /* ── 同步播放循环 ── */
 async function syncLoop() {
-  if (!running || !comparer) return;
+  if (!running) return;
 
   // 同步: 以较慢的为准
   const dt = Math.abs(leftVideo.currentTime - rightVideo.currentTime);
@@ -120,25 +119,27 @@ async function syncLoop() {
   const w = leftVideo.videoWidth;
   const h = leftVideo.videoHeight;
 
-  // 对比
-  try {
-    const metrics = await comparer.compare({
-      left: leftRGB,
-      right: rightRGB,
-      width: w,
-      height: h,
-    });
+  // 对比 (仅当 Wasm 可用时)
+  if (comparer) {
+    try {
+      const metrics = await comparer.compare({
+        left: leftRGB,
+        right: rightRGB,
+        width: w,
+        height: h,
+      });
 
-    updateMetrics(metrics);
-    drawDiff(leftRGB, rightRGB, w, h, diffCtx, diffCanvas);
-    drawChart();
+      updateMetrics(metrics);
+      drawDiff(leftRGB, rightRGB, w, h, diffCtx, diffCanvas);
+      drawChart();
 
-    // FPS
-    const dt = (performance.now() - t0) / 1000;
-    const fps = dt > 0 ? (1 / dt).toFixed(1) : '-';
-    document.getElementById('fpsV')!.textContent = fps;
-  } catch (e) {
-    console.warn('compare failed:', e);
+      // FPS
+      const dt = (performance.now() - t0) / 1000;
+      const fps = dt > 0 ? (1 / dt).toFixed(1) : '-';
+      document.getElementById('fpsV')!.textContent = fps;
+    } catch (e) {
+      console.warn('compare failed:', e);
+    }
   }
 
   // 更新进度条
@@ -268,8 +269,7 @@ async function main() {
   leftVideo = document.getElementById('leftVideo') as HTMLVideoElement;
   rightVideo = document.getElementById('rightVideo') as HTMLVideoElement;
 
-  await initWasm();
-
+  // 先注册文件选择事件(不依赖 Wasm)
   setupFileInput(
     document.getElementById('leftInput') as HTMLInputElement,
     document.getElementById('leftBox')!,
@@ -284,6 +284,13 @@ async function main() {
   );
 
   setupControls();
+
+  // Wasm 异步初始化,失败不阻塞 UI
+  try {
+    await initWasm();
+  } catch (e) {
+    console.warn('⚠️ Wasm 初始化失败,对比功能不可用:', e);
+  }
 }
 
 main();

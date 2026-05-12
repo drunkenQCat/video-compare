@@ -21,5 +21,9 @@ mv dist-esm/VideoComparer.js dist/VideoComparer.mjs
 mv dist-esm/VideoComparer.js.map dist/VideoComparer.mjs.map 2>/dev/null || true
 rm -rf dist-esm
 
+# 修复 ESM 文件中的 import 路径：.js → .mjs
+sed -i "s/from '\.\/\(.*\)\.js'/from '.\/\1.mjs'/g" dist/index.mjs
+sed -i "s/from \"\.\/\(.*\)\.js\"/from \".\/\1.mjs\"/g" dist/index.mjs
+
 echo "✅ Build complete. dist/ contents:"
 ls -la dist/
