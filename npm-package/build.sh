@@ -25,5 +25,15 @@ rm -rf dist-esm
 sed -i "s/from '\.\/\(.*\)\.js'/from '.\/\1.mjs'/g" dist/index.mjs
 sed -i "s/from \"\.\/\(.*\)\.js\"/from \".\/\1.mjs\"/g" dist/index.mjs
 
+# 4. 复制 Wasm 文件 (从 CI 输出目录)
+WASM_SRC="../wasm-artifacts/new-build/ci-output/build-wasm"
+if [ -f "$WASM_SRC/video-compare.js" ]; then
+    cp "$WASM_SRC/video-compare.js" dist/
+    cp "$WASM_SRC/video-compare.wasm" dist/
+    echo "✅ Wasm files copied"
+else
+    echo "⚠️ Wasm files not found at $WASM_SRC"
+fi
+
 echo "✅ Build complete. dist/ contents:"
 ls -la dist/
