@@ -1,6 +1,6 @@
 {
   "name": "@cfai/video-compare",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "WebAssembly library for real-time image frame comparison (SSIM/PSNR/MSE)",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
