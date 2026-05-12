@@ -81,12 +81,18 @@ async function loadWasmModule(): Promise<WasmModule> {
     return m as WasmModule;
   }
 
-  // 2. 浏览器环境: fetch JS loader + eval (绕过 bundler exports 限制)
+  // 2. 浏览器环境: 动态创建 <script> 加载 video-compare.js
   if (typeof document !== 'undefined') {
     return new Promise<WasmModule>((resolve, reject) => {
       const script = document.createElement('script');
-      // 尝试从同目录加载 (npm package dist/)
-      script.src = new URL('video-compare.js', import.meta.url).href;
+      // 从同目录加载 (npm package dist/ 中 index.mjs 和 video-compare.js 在同一目录)
+      // @ts-ignore
+      const base = typeof __dirname !== 'undefined'
+        // @ts-ignore
+        ? 'file://' + __dirname + '/'
+        // @ts-ignore
+        : new URL('.', import.meta.url).href;
+      script.src = base + 'video-compare.js';
       script.onload = () => {
         // @ts-ignore
         const m = (typeof VideoCompareModule !== 'undefined')
@@ -98,7 +104,7 @@ async function loadWasmModule(): Promise<WasmModule> {
         else reject(new Error('VideoCompareModule not registered after script load'));
       };
       script.onerror = () => reject(new Error(
-        'Failed to load video-compare.js. Ensure the .js and .wasm files are in the same directory as index.mjs'
+        'Failed to load video-compare.js from ' + script.src
       ));
       document.head.appendChild(script);
     });
