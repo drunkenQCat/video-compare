@@ -111,7 +111,14 @@ async function syncLoop() {
   const leftRGB = await extractFrame(leftVideo);
   const rightRGB = await extractFrame(rightVideo);
 
+  // DEBUG: 检查帧提取
   if (!leftRGB || !rightRGB) {
+    console.log('⏳ 等待帧...', {
+      leftReady: leftVideo.readyState,
+      rightReady: rightVideo.readyState,
+      leftRGB: !!leftRGB,
+      rightRGB: !!rightRGB
+    });
     animFrame = requestAnimationFrame(syncLoop);
     return;
   }
@@ -122,12 +129,14 @@ async function syncLoop() {
   // 对比 (仅当 Wasm 可用时)
   if (comparer) {
     try {
+      console.log('🔍 开始对比...', { w, h, leftSize: leftRGB.length, rightSize: rightRGB.length });
       const metrics = await comparer.compare({
         left: leftRGB,
         right: rightRGB,
         width: w,
         height: h,
       });
+      console.log('✅ 对比结果:', metrics);
 
       updateMetrics(metrics);
       drawDiff(leftRGB, rightRGB, w, h, diffCtx, diffCanvas);
@@ -138,8 +147,10 @@ async function syncLoop() {
       const fps = dt > 0 ? (1 / dt).toFixed(1) : '-';
       document.getElementById('fpsV')!.textContent = fps;
     } catch (e) {
-      console.warn('compare failed:', e);
+      console.error('❌ compare failed:', e);
     }
+  } else {
+    console.warn('⚠️ comparer 未初始化');
   }
 
   // 更新进度条
