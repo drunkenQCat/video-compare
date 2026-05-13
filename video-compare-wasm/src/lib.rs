@@ -9,12 +9,14 @@ mod types;
 mod config;
 mod utils;
 mod metrics;
+mod frame_cache;
 
 // Re-export for internal use
 use types::{CompareConfig, CompareMetrics};
 use config::{get_config, set_config, init_default};
 use utils::downsample_bilinear;
 use metrics::{compute_block_ssim, compute_block_mse, calculate_psnr};
+use frame_cache::{init_cache, cache_frame_slot, clear_cache, compare_cached, get_cached_diff_rgba};
 
 // ============================================================================
 // wasm-bindgen exports
@@ -443,4 +445,45 @@ pub fn compute_pixel_diff(
 #[wasm_bindgen(start)]
 pub fn wasm_init() {
     init_default();
+}
+
+// ============================================================================
+// Frame Cache API (for efficient video comparison)
+// ============================================================================
+
+/// Initialize frame cache with expected dimensions
+/// Call this before starting video comparison
+#[wasm_bindgen]
+pub fn init_frame_cache(width: i32, height: i32) {
+    init_cache(width, height);
+}
+
+/// Cache a frame to slot (0 = left, 1 = right)
+/// RGB data should be width * height * 3 bytes
+#[wasm_bindgen]
+pub fn cache_frame(slot: i32, rgb: &[u8], width: i32, height: i32) {
+    cache_frame_slot(slot as usize, rgb, width, height);
+}
+
+/// Clear all cached frames
+#[wasm_bindgen]
+pub fn clear_frame_cache() {
+    clear_cache();
+}
+
+/// Compare cached frames and return metrics
+/// Returns (ssim, psnr, mse, max_diff) tuple
+#[wasm_bindgen]
+pub fn compare_cached_frames() -> Vec<f32> {
+    let (ssim, psnr, mse, max_diff) = compare_cached();
+    vec![ssim, psnr, mse, max_diff]
+}
+
+/// Get cached diff as Uint8Array (RGBA format, ready for canvas)
+#[wasm_bindgen]
+pub fn get_diff_rgba() -> js_sys::Uint8Array {
+    let rgba = get_cached_diff_rgba();
+    let arr = js_sys::Uint8Array::new_with_length(rgba.len() as u32);
+    arr.copy_from(&rgba);
+    arr
 }
