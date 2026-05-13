@@ -8,12 +8,14 @@ on:
     branches:
       - main
       - master
+      - wasm
       - "rust-*"
-      - "wasm-rust"
+      - "wasm-*"
   pull_request:
     branches:
       - main
       - master
+      - wasm
   workflow_dispatch:
 
 permissions:
