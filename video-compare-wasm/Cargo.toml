@@ -1,0 +1,24 @@
+[package]
+name = "video-compare-wasm"
+version = "2.0.0"
+edition = "2021"
+description = "WebAssembly video/image comparison library with SSIM, PSNR, MSE metrics - Built with Rust"
+license = "MIT"
+repository = "https://github.com/drunkenQCat/video-compare"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "--enable-mutable-globals"]

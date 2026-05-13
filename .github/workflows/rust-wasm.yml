@@ -1,0 +1,88 @@
+# .github/workflows/rust-wasm.yml
+# Rust WASM Build - 使用 wasm-pack 构建 WebAssembly
+
+name: Rust WASM Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "rust-*"
+      - "wasm-rust"
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build WASM with Rust
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            video-compare-wasm/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('video-compare-wasm/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Build WASM (web target)
+        working-directory: video-compare-wasm
+        run: wasm-pack build --target web --out-dir pkg
+
+      - name: Verify build output
+        run: |
+          echo "Build artifacts:"
+          ls -lh video-compare-wasm/pkg/
+
+          echo "WASM size:"
+          stat video-compare-wasm/pkg/video_compare_wasm_bg.wasm | grep Size
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: video-compare-wasm-rust
+          path: |
+            video-compare-wasm/pkg/*.wasm
+            video-compare-wasm/pkg/*.js
+            video-compare-wasm/pkg/*.d.ts
+            video-compare-wasm/pkg/package.json
+          retention-days: 90
+
+      - name: Build summary
+        run: |
+          echo "## 🦀 Rust WASM Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ✅ ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Artifacts" >> $GITHUB_STEP_SUMMARY
+          ls -lh video-compare-wasm/pkg/*.wasm video-compare-wasm/pkg/*.js >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Total Size" >> $GITHUB_STEP_SUMMARY
+          du -sh video-compare-wasm/pkg/ >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "**告别 C++，拥抱 Rust！** 🎉" >> $GITHUB_STEP_SUMMARY

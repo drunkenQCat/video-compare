@@ -28,3 +28,8 @@ video-compare
 *.png
 
 wasm-artifacts
+npm-package/dist
+npm-package/node_modules
+npm-package/package-lock.json
+video-compare-wasm/target
+video-compare-wasm/pkg

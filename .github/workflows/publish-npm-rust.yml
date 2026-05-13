@@ -1,0 +1,93 @@
+# .github/workflows/publish-npm-rust.yml
+# Rust WASM NPM 发布 - 当推送 v* tag 时自动发布到 npm
+
+name: Publish NPM (Rust)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    name: Build & Publish to NPM
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          scope: "@cfai"
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Build WASM
+        working-directory: video-compare-wasm
+        run: wasm-pack build --target web --out-dir pkg
+
+      - name: Update package.json for npm
+        working-directory: video-compare-wasm/pkg
+        run: |
+          # Read version from tag (e.g., v2.0.0 -> 2.0.0)
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Publishing version: $VERSION"
+
+          # Update package.json
+          cat package.json | jq \
+            --arg name "@cfai/video-compare" \
+            --arg version "$VERSION" \
+            '.name = $name | .version = $version' > package.json.tmp
+          mv package.json.tmp package.json
+
+          echo "Updated package.json:"
+          cat package.json
+
+      - name: Setup NPM auth
+        working-directory: video-compare-wasm/pkg
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
+      - name: Publish to NPM
+        working-directory: video-compare-wasm/pkg
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build summary
+        run: |
+          echo "## 🦀 NPM Publish Summary (Rust)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ✅ Published successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Package** | @cfai/video-compare |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Runtime** | Rust WASM |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Package Contents" >> $GITHUB_STEP_SUMMARY
+          ls -lh video-compare-wasm/pkg/*.wasm video-compare-wasm/pkg/*.js >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "**🎉 从 C++ 到 Rust 的华丽转身！**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
+          echo "npm install @cfai/video-compare@${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY

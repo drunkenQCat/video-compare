@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@cfai/video-compare": "^1.0.5"
+    "@cfai/video-compare": "^1.0.7"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
