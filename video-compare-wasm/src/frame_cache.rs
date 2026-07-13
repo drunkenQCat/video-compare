@@ -1,11 +1,11 @@
-/// Frame cache system for efficient video comparison
-///
-/// Reduces data transfer by caching frames in WASM memory
-/// and outputting pre-computed RGBA diff images.
+//! Frame cache for video comparison
+//!
+//! Caches two video frames in WASM memory and provides fast comparison
+//! with pre-computed RGBA diff output (ready for canvas).
 
-use std::cell::RefCell;
+use crate::utils::{diff_to_color};
 
-/// Cached frame data
+/// A cached video frame in RGB format (3 bytes per pixel)
 struct CachedFrame {
     rgb: Vec<u8>,
     width: i32,
@@ -14,18 +14,14 @@ struct CachedFrame {
 
 impl CachedFrame {
     fn new() -> Self {
-        Self {
-            rgb: Vec::new(),
-            width: 0,
-            height: 0,
-        }
+        Self { rgb: Vec::new(), width: 0, height: 0 }
     }
 
-    fn set(&mut self, rgb: &[u8], width: i32, height: i32) {
+    fn set_data(&mut self, data: &[u8], width: i32, height: i32) {
+        self.rgb.clear();
+        self.rgb.extend_from_slice(data);
         self.width = width;
         self.height = height;
-        self.rgb.resize(rgb.len(), 0);
-        self.rgb.copy_from_slice(rgb);
     }
 
     fn clear(&mut self) {
@@ -33,16 +29,21 @@ impl CachedFrame {
         self.width = 0;
         self.height = 0;
     }
+
+    fn is_ready(&self) -> bool {
+        self.width > 0 && self.height > 0 && !self.rgb.is_empty()
+    }
 }
 
-/// Global frame cache with 2 slots (left/right)
 pub struct FrameCache {
     frames: [CachedFrame; 2],
-    /// Pre-computed RGBA diff image (ready for canvas)
     diff_rgba: Vec<u8>,
     width: i32,
     height: i32,
     max_diff: f32,
+    diff_ema: Vec<f32>,
+    ema_alpha: f32,
+    ema_initialized: bool,
 }
 
 impl FrameCache {
@@ -50,192 +51,250 @@ impl FrameCache {
         Self {
             frames: [CachedFrame::new(), CachedFrame::new()],
             diff_rgba: Vec::new(),
-            width: 0,
-            height: 0,
-            max_diff: 0.0,
+            width: 0, height: 0, max_diff: 0.0,
+            diff_ema: Vec::new(), ema_alpha: 1.0, ema_initialized: false,
         }
     }
 
-    /// Initialize cache with expected dimensions
     pub fn init(&mut self, width: i32, height: i32) {
         self.width = width;
         self.height = height;
         let pixel_count = (width * height) as usize;
         self.diff_rgba.resize(pixel_count * 4, 0);
+        self.diff_ema.resize(pixel_count, 0.0);
+        self.ema_initialized = false;
     }
 
-    /// Cache a frame to specified slot (0 or 1)
     pub fn cache_frame(&mut self, slot: usize, rgb: &[u8], width: i32, height: i32) {
-        if slot < 2 {
-            self.frames[slot].set(rgb, width, height);
-        }
+        if slot < 2 { self.frames[slot].set_data(rgb, width, height); }
     }
 
-    /// Clear a specific slot
-    pub fn clear_slot(&mut self, slot: usize) {
-        if slot < 2 {
-            self.frames[slot].clear();
-        }
+    pub fn is_ready(&self) -> bool {
+        self.frames[0].is_ready() && self.frames[1].is_ready()
     }
 
-    /// Clear all cached data
+    pub fn get_diff_rgba(&self) -> &[u8] { &self.diff_rgba }
+
     pub fn clear(&mut self) {
         self.frames[0].clear();
         self.frames[1].clear();
         self.diff_rgba.clear();
-        self.width = 0;
-        self.height = 0;
-        self.max_diff = 0.0;
+        self.diff_ema.clear();
+        self.width = 0; self.height = 0; self.max_diff = 0.0;
+        self.ema_initialized = false;
     }
 
-    /// Check if both slots have valid frames
-    pub fn is_ready(&self) -> bool {
-        self.frames[0].width > 0 && self.frames[1].width > 0 &&
-        self.frames[0].width == self.frames[1].width &&
-        self.frames[0].height == self.frames[1].height
-    }
-
-    /// Get cached frame dimensions
-    pub fn dimensions(&self) -> (i32, i32) {
-        (self.frames[0].width, self.frames[0].height)
-    }
-
-    /// Compute pixel diff and generate RGBA output
-    /// Returns (ssim, psnr, mse, max_diff)
     pub fn compute_diff_rgba(&mut self) -> (f32, f32, f32, f32) {
-        if !self.is_ready() {
-            return (0.0, 0.0, 0.0, 0.0);
+        if !self.is_ready() { return (0.0, 0.0, 0.0, 0.0); }
+
+        let src_w = self.frames[0].width;
+        let src_h = self.frames[0].height;
+
+        let max_w: i32 = 1280;
+        let max_h: i32 = 720;
+
+        if src_w > max_w || src_h > max_h {
+            let scale = (max_w as f32 / src_w as f32).min(max_h as f32 / src_h as f32);
+            let dw = (src_w as f32 * scale) as i32;
+            let dh = (src_h as f32 * scale) as i32;
+            let buf_size = (dw * dh * 3) as usize;
+            let mut left_buf = vec![0u8; buf_size];
+            let mut right_buf = vec![0u8; buf_size];
+            crate::utils::downsample_bilinear(&self.frames[0].rgb, src_w, src_h, &mut left_buf, dw, dh);
+            crate::utils::downsample_bilinear(&self.frames[1].rgb, src_w, src_h, &mut right_buf, dw, dh);
+            self.compute_diff_impl(&left_buf, &right_buf, dw, dh)
+        } else {
+            // mem::take avoids cloning (zero-copy move out and back)
+            let left = std::mem::take(&mut self.frames[0].rgb);
+            let right = std::mem::take(&mut self.frames[1].rgb);
+            let result = self.compute_diff_impl(&left, &right, src_w, src_h);
+            self.frames[0].rgb = left;
+            self.frames[1].rgb = right;
+            result
         }
+    }
 
-        let left = &self.frames[0];
-        let right = &self.frames[1];
-        let width = left.width;
-        let height = left.height;
+    /// Single-pass: diff + metrics + coloring. EMA optional.
+    fn compute_diff_impl(&mut self, left: &[u8], right: &[u8], width: i32, height: i32) -> (f32, f32, f32, f32) {
+        if self.ema_alpha < 1.0 {
+            self.compute_diff_ema(left, right, width, height)
+        } else {
+            self.compute_diff_fast(left, right, width, height)
+        }
+    }
+
+    /// Fast path: no EMA, simple threshold coloring
+    fn compute_diff_fast(&mut self, left: &[u8], right: &[u8], width: i32, height: i32) -> (f32, f32, f32, f32) {
         let pixel_count = (width * height) as usize;
-
-        // Ensure RGBA buffer is sized correctly
         self.diff_rgba.resize(pixel_count * 4, 0);
 
-        let mut max_diff: f32 = 0.0;
-        let mut total_diff: f64 = 0.0;
-        let mut ssim_sum: f32 = 0.0;
-        let mut mse_sum: f64 = 0.0;
+        let normalize_max = self.max_diff.max(1.0);
+        let inv_normalize = 1.0 / normalize_max;
+        let inv_255 = 1.0 / 255.0;
+        let threshold_sq = 0.12 * 0.12 * 3.0 * 255.0 * 255.0; // threshold in diff_sq units
 
-        // Compute per-pixel diff and convert to RGBA with heatmap coloring
+        let mut current_max: f32 = 0.0;
+        let mut ssim_sum: f32 = 0.0;
+        let mut mse_sum: f32 = 0.0;
+
         for i in 0..pixel_count {
             let idx = i * 3;
-            let dr = (left.rgb[idx] as i32 - right.rgb[idx] as i32).abs();
-            let dg = (left.rgb[idx + 1] as i32 - right.rgb[idx + 1] as i32).abs();
-            let db = (left.rgb[idx + 2] as i32 - right.rgb[idx + 2] as i32).abs();
-
+            let ri = i * 4;
+            let dr = (left[idx] as i32 - right[idx] as i32).abs();
+            let dg = (left[idx + 1] as i32 - right[idx + 1] as i32).abs();
+            let db = (left[idx + 2] as i32 - right[idx + 2] as i32).abs();
             let diff_sq = (dr * dr + dg * dg + db * db) as f32;
 
-            total_diff += diff_sq as f64;
-            mse_sum += diff_sq as f64;
-            if diff_sq > max_diff {
-                max_diff = diff_sq;
+            mse_sum += diff_sq;
+            current_max = current_max.max(diff_sq);
+
+            let l1 = 0.2126 * left[idx] as f32 + 0.7152 * left[idx + 1] as f32 + 0.0722 * left[idx + 2] as f32;
+            let l2 = 0.2126 * right[idx] as f32 + 0.7152 * right[idx + 1] as f32 + 0.0722 * right[idx + 2] as f32;
+            ssim_sum += 1.0 - (l1 - l2).abs() * inv_255;
+
+            // Simple threshold: below = original, above = heatmap
+            if diff_sq < threshold_sq {
+                self.diff_rgba[ri]     = left[idx];
+                self.diff_rgba[ri + 1] = left[idx + 1];
+                self.diff_rgba[ri + 2] = left[idx + 2];
+            } else {
+                let normalized = (diff_sq * inv_normalize).sqrt().min(1.0);
+                let n2 = normalized * 2.0;
+                self.diff_rgba[ri]     = ((n2 - 1.0).max(0.0) * 255.0) as u8;
+                self.diff_rgba[ri + 1] = ((1.0 - (n2 - 1.0).abs()) * 255.0) as u8;
+                self.diff_rgba[ri + 2] = (((1.0 - n2).max(0.0)) * 255.0) as u8;
             }
-
-            // SSIM contribution (simplified per-pixel luminance similarity)
-            let l1 = 0.2126 * left.rgb[idx] as f32 + 0.7152 * left.rgb[idx + 1] as f32 + 0.0722 * left.rgb[idx + 2] as f32;
-            let l2 = 0.2126 * right.rgb[idx] as f32 + 0.7152 * right.rgb[idx + 1] as f32 + 0.0722 * right.rgb[idx + 2] as f32;
-            let luminance_sim = 1.0 - (l1 - l2).abs() / 255.0;
-            ssim_sum += luminance_sim;
-
-            // Convert diff to heatmap color (blue-green-yellow-red)
-            let rgba_idx = i * 4;
-            let normalized = if max_diff > 0.0 { 
-                (diff_sq / max_diff).sqrt() 
-            } else { 
-                0.0 
-            };
-
-            let (r, g, b) = diff_to_color(normalized);
-            self.diff_rgba[rgba_idx] = r;
-            self.diff_rgba[rgba_idx + 1] = g;
-            self.diff_rgba[rgba_idx + 2] = b;
-            self.diff_rgba[rgba_idx + 3] = 255;
+            self.diff_rgba[ri + 3] = 255;
         }
 
-        self.max_diff = max_diff;
-
+        self.max_diff = current_max;
         let avg_ssim = ssim_sum / pixel_count as f32;
-        let avg_mse = mse_sum / pixel_count as f64;
+        let avg_mse = mse_sum / pixel_count as f32;
+        let psnr = if avg_mse > 0.0 { 10.0 * (65025.0 / avg_mse).log10() } else { 100.0 };
+        (avg_ssim, psnr, avg_mse, current_max)
+    }
 
-        // Calculate PSNR
-        let psnr = if avg_mse > 0.0 {
-            10.0 * (255.0 * 255.0 / avg_mse).log10()
+    /// EMA path: per-pixel temporal filtering
+    fn compute_diff_ema(&mut self, left: &[u8], right: &[u8], width: i32, height: i32) -> (f32, f32, f32, f32) {
+        let pixel_count = (width * height) as usize;
+        self.diff_rgba.resize(pixel_count * 4, 0);
+        if self.diff_ema.len() != pixel_count {
+            self.diff_ema = vec![0.0; pixel_count];
+            self.ema_initialized = false;
+        }
+
+        let alpha = self.ema_alpha;
+        let normalize_max = self.max_diff.max(1.0);
+        let inv_normalize = 1.0 / normalize_max;
+        let inv_255 = 1.0 / 255.0;
+        let threshold_sq = 0.12 * 0.12 * 3.0 * 255.0 * 255.0;
+
+        let mut current_max: f32 = 0.0;
+        let mut ssim_sum: f32 = 0.0;
+        let mut mse_sum: f32 = 0.0;
+
+        if self.ema_initialized {
+            for i in 0..pixel_count {
+                let idx = i * 3;
+                let ri = i * 4;
+                let dr = (left[idx] as i32 - right[idx] as i32).abs();
+                let dg = (left[idx + 1] as i32 - right[idx + 1] as i32).abs();
+                let db = (left[idx + 2] as i32 - right[idx + 2] as i32).abs();
+                let diff_sq = (dr * dr + dg * dg + db * db) as f32;
+
+                let prev = self.diff_ema[i];
+                let ema_val = alpha * diff_sq + (1.0 - alpha) * prev;
+                self.diff_ema[i] = ema_val;
+
+                mse_sum += diff_sq;
+                current_max = current_max.max(ema_val);
+
+                let l1 = 0.2126 * left[idx] as f32 + 0.7152 * left[idx + 1] as f32 + 0.0722 * left[idx + 2] as f32;
+                let l2 = 0.2126 * right[idx] as f32 + 0.7152 * right[idx + 1] as f32 + 0.0722 * right[idx + 2] as f32;
+                ssim_sum += 1.0 - (l1 - l2).abs() * inv_255;
+
+                if ema_val < threshold_sq {
+                    self.diff_rgba[ri]     = left[idx];
+                    self.diff_rgba[ri + 1] = left[idx + 1];
+                    self.diff_rgba[ri + 2] = left[idx + 2];
+                } else {
+                    let normalized = (ema_val * inv_normalize).sqrt().min(1.0);
+                    let n2 = normalized * 2.0;
+                    self.diff_rgba[ri]     = ((n2 - 1.0).max(0.0) * 255.0) as u8;
+                    self.diff_rgba[ri + 1] = ((1.0 - (n2 - 1.0).abs()) * 255.0) as u8;
+                    self.diff_rgba[ri + 2] = (((1.0 - n2).max(0.0)) * 255.0) as u8;
+                }
+                self.diff_rgba[ri + 3] = 255;
+            }
         } else {
-            100.0 // Perfect match
-        };
+            for i in 0..pixel_count {
+                let idx = i * 3;
+                let ri = i * 4;
+                let dr = (left[idx] as i32 - right[idx] as i32).abs();
+                let dg = (left[idx + 1] as i32 - right[idx + 1] as i32).abs();
+                let db = (left[idx + 2] as i32 - right[idx + 2] as i32).abs();
+                let diff_sq = (dr * dr + dg * dg + db * db) as f32;
 
-        (avg_ssim, psnr as f32, avg_mse as f32, max_diff)
-    }
+                self.diff_ema[i] = diff_sq;
+                mse_sum += diff_sq;
+                current_max = current_max.max(diff_sq);
 
-    /// Get the RGBA diff data
-    pub fn get_diff_rgba(&self) -> &[u8] {
-        &self.diff_rgba
-    }
+                let l1 = 0.2126 * left[idx] as f32 + 0.7152 * left[idx + 1] as f32 + 0.0722 * left[idx + 2] as f32;
+                let l2 = 0.2126 * right[idx] as f32 + 0.7152 * right[idx + 1] as f32 + 0.0722 * right[idx + 2] as f32;
+                ssim_sum += 1.0 - (l1 - l2).abs() * inv_255;
 
-    /// Get max diff value
-    pub fn max_diff(&self) -> f32 {
-        self.max_diff
+                if diff_sq < threshold_sq {
+                    self.diff_rgba[ri]     = left[idx];
+                    self.diff_rgba[ri + 1] = left[idx + 1];
+                    self.diff_rgba[ri + 2] = left[idx + 2];
+                } else {
+                    let normalized = (diff_sq * inv_normalize).sqrt().min(1.0);
+                    let n2 = normalized * 2.0;
+                    self.diff_rgba[ri]     = ((n2 - 1.0).max(0.0) * 255.0) as u8;
+                    self.diff_rgba[ri + 1] = ((1.0 - (n2 - 1.0).abs()) * 255.0) as u8;
+                    self.diff_rgba[ri + 2] = (((1.0 - n2).max(0.0)) * 255.0) as u8;
+                }
+                self.diff_rgba[ri + 3] = 255;
+            }
+            self.ema_initialized = true;
+        }
+
+        self.max_diff = current_max;
+        let avg_ssim = ssim_sum / pixel_count as f32;
+        let avg_mse = mse_sum / pixel_count as f32;
+        let psnr = if avg_mse > 0.0 { 10.0 * (65025.0 / avg_mse).log10() } else { 100.0 };
+        (avg_ssim, psnr, avg_mse, current_max)
     }
 }
 
-/// Convert normalized diff (0-1) to heatmap RGB color
-fn diff_to_color(n: f32) -> (u8, u8, u8) {
-    if n < 0.25 {
-        let t = n / 0.25;
-        (0, (255.0 * t) as u8, 255)
-    } else if n < 0.5 {
-        let t = (n - 0.25) / 0.25;
-        (0, 255, (255.0 * (1.0 - t)) as u8)
-    } else if n < 0.75 {
-        let t = (n - 0.5) / 0.25;
-        ((255.0 * t) as u8, 255, 0)
-    } else {
-        let t = (n - 0.75) / 0.25;
-        (255, (255.0 * (1.0 - t)) as u8, 0)
-    }
-}
+// ============================================================================
+// Module-level functions using thread_local
+// ============================================================================
 
-// Thread-local frame cache (WASM friendly)
 thread_local! {
-    pub static FRAME_CACHE: RefCell<FrameCache> = RefCell::new(FrameCache::new());
+    static FRAME_CACHE: std::cell::RefCell<FrameCache> = std::cell::RefCell::new(FrameCache::new());
 }
 
-/// Initialize the frame cache with expected dimensions
 pub fn init_cache(width: i32, height: i32) {
-    FRAME_CACHE.with(|c| {
-        c.borrow_mut().init(width, height);
-    });
+    FRAME_CACHE.with(|c| { c.borrow_mut().init(width, height); });
 }
 
-/// Cache a frame to slot 0 or 1
 pub fn cache_frame_slot(slot: usize, rgb: &[u8], width: i32, height: i32) {
-    FRAME_CACHE.with(|c| {
-        c.borrow_mut().cache_frame(slot, rgb, width, height);
-    });
+    FRAME_CACHE.with(|c| { c.borrow_mut().cache_frame(slot, rgb, width, height); });
 }
 
-/// Clear the frame cache
 pub fn clear_cache() {
-    FRAME_CACHE.with(|c| {
-        c.borrow_mut().clear();
-    });
+    FRAME_CACHE.with(|c| { c.borrow_mut().clear(); });
 }
 
-/// Compare cached frames and return metrics
 pub fn compare_cached() -> (f32, f32, f32, f32) {
-    FRAME_CACHE.with(|c| {
-        c.borrow_mut().compute_diff_rgba()
-    })
+    FRAME_CACHE.with(|c| { c.borrow_mut().compute_diff_rgba() })
 }
 
-/// Get cached diff RGBA data as Vec
 pub fn get_cached_diff_rgba() -> Vec<u8> {
-    FRAME_CACHE.with(|c| {
-        c.borrow().get_diff_rgba().to_vec()
-    })
+    FRAME_CACHE.with(|c| { c.borrow().get_diff_rgba().to_vec() })
+}
+
+pub fn set_ema_alpha(alpha: f32) {
+    FRAME_CACHE.with(|c| { c.borrow_mut().ema_alpha = alpha.clamp(0.01, 1.0); });
 }

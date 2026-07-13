@@ -15,10 +15,19 @@ js-sys = "0.3"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[profile.bench]
+opt-level = 3
+lto = true
+
+[[bench]]
+name = "comparison_bench"
+harness = false
 
 [profile.release]
 opt-level = 3
 lto = true
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "--enable-mutable-globals"]
+wasm-opt = ["-Oz", "--enable-mutable-globals", "--enable-simd"]

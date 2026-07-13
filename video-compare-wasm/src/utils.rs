@@ -8,6 +8,19 @@ pub fn rgb_to_gray(r: u8, g: u8, b: u8) -> f32 {
     0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32
 }
 
+/// Convert normalized diff (0-1) to heatmap color (blue → green → red)
+/// Branchless implementation for auto-vectorization
+#[inline]
+pub fn diff_to_color(normalized: f32) -> (u8, u8, u8) {
+    let n = normalized.clamp(0.0, 1.0);
+    // R: ramp up from 0.5 to 1.0
+    let r = ((n * 2.0 - 1.0).max(0.0) * 255.0) as u8;
+    // G: peak at 0.5, zero at 0 and 1
+    let g = ((1.0 - (n * 2.0 - 1.0).abs()) * 255.0) as u8;
+    // B: ramp down from 0 to 0.5
+    let b = (((1.0 - n * 2.0).max(0.0)) * 255.0) as u8;
+    (r, g, b)
+}
 /// Simple bilinear downsampling
 ///
 /// Takes nearest neighbor for simplicity (not true bilinear interpolation).

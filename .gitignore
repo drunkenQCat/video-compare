@@ -33,3 +33,5 @@ npm-package/node_modules
 npm-package/package-lock.json
 video-compare-wasm/target
 video-compare-wasm/pkg
+video-compare-wasm/pkg-web
+"video-compare-wasm/benches/tmp_frames/"  

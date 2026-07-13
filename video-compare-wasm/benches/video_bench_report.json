@@ -1,0 +1,426 @@
+{
+  "config": {
+    "leftVideo": "C:\\CreativeProjects\\CFAI_MatchBoxTest\\Original.mov",
+    "rightVideo": "C:\\CreativeProjects\\CFAI_MatchBoxTest\\Modify.mov",
+    "frames": 50,
+    "extractionFps": 5,
+    "resolution": "1280x720"
+  },
+  "performance": {
+    "min": 22.081499999999778,
+    "median": 23.33040000000028,
+    "mean": 24.189568000000026,
+    "p95": 29.453399999999874,
+    "max": 38.60219999999981,
+    "fps": 42.86253128964732
+  },
+  "metrics": {
+    "avgSsim": 0.989794,
+    "minSsim": 0.9285,
+    "maxSsim": 1,
+    "avgPsnr": 69.2546,
+    "avgMse": 394.07959999999997
+  },
+  "frameData": [
+    {
+      "frame": 0,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 38.602
+    },
+    {
+      "frame": 1,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.887
+    },
+    {
+      "frame": 2,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.794
+    },
+    {
+      "frame": 3,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 23.548
+    },
+    {
+      "frame": 4,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.875
+    },
+    {
+      "frame": 5,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.153
+    },
+    {
+      "frame": 6,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.585
+    },
+    {
+      "frame": 7,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 23.06
+    },
+    {
+      "frame": 8,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.357
+    },
+    {
+      "frame": 9,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.491
+    },
+    {
+      "frame": 10,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.381
+    },
+    {
+      "frame": 11,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.648
+    },
+    {
+      "frame": 12,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.405
+    },
+    {
+      "frame": 13,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 23.116
+    },
+    {
+      "frame": 14,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.236
+    },
+    {
+      "frame": 15,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 23.057
+    },
+    {
+      "frame": 16,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.327
+    },
+    {
+      "frame": 17,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.814
+    },
+    {
+      "frame": 18,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 23.164
+    },
+    {
+      "frame": 19,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.149
+    },
+    {
+      "frame": 20,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.692
+    },
+    {
+      "frame": 21,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.374
+    },
+    {
+      "frame": 22,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.547
+    },
+    {
+      "frame": 23,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 24.012
+    },
+    {
+      "frame": 24,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 23.33
+    },
+    {
+      "frame": 25,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.157
+    },
+    {
+      "frame": 26,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.081
+    },
+    {
+      "frame": 27,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.09
+    },
+    {
+      "frame": 28,
+      "ssim": 1,
+      "psnr": 100,
+      "mse": 0,
+      "maxDiff": 0,
+      "elapsedMs": 22.592
+    },
+    {
+      "frame": 29,
+      "ssim": 0.9999,
+      "psnr": 43.17,
+      "mse": 3.14,
+      "maxDiff": 24.3,
+      "elapsedMs": 29.453
+    },
+    {
+      "frame": 30,
+      "ssim": 0.9999,
+      "psnr": 43.39,
+      "mse": 2.98,
+      "maxDiff": 36.78,
+      "elapsedMs": 29.336
+    },
+    {
+      "frame": 31,
+      "ssim": 0.9999,
+      "psnr": 43.42,
+      "mse": 2.96,
+      "maxDiff": 45.33,
+      "elapsedMs": 29.467
+    },
+    {
+      "frame": 32,
+      "ssim": 0.9999,
+      "psnr": 43.55,
+      "mse": 2.87,
+      "maxDiff": 47.14,
+      "elapsedMs": 29.293
+    },
+    {
+      "frame": 33,
+      "ssim": 0.9999,
+      "psnr": 45.58,
+      "mse": 1.8,
+      "maxDiff": 46.68,
+      "elapsedMs": 28.966
+    },
+    {
+      "frame": 34,
+      "ssim": 1,
+      "psnr": 46.18,
+      "mse": 1.57,
+      "maxDiff": 43.82,
+      "elapsedMs": 28.915
+    },
+    {
+      "frame": 35,
+      "ssim": 0.9286,
+      "psnr": 12.86,
+      "mse": 3363.23,
+      "maxDiff": 49318.89,
+      "elapsedMs": 23.727
+    },
+    {
+      "frame": 36,
+      "ssim": 0.9286,
+      "psnr": 12.86,
+      "mse": 3362.13,
+      "maxDiff": 83781.42,
+      "elapsedMs": 23.752
+    },
+    {
+      "frame": 37,
+      "ssim": 0.9286,
+      "psnr": 12.87,
+      "mse": 3360.9,
+      "maxDiff": 107508.9,
+      "elapsedMs": 23.519
+    },
+    {
+      "frame": 38,
+      "ssim": 0.9285,
+      "psnr": 12.86,
+      "mse": 3368.56,
+      "maxDiff": 124095.3,
+      "elapsedMs": 23.515
+    },
+    {
+      "frame": 39,
+      "ssim": 0.9961,
+      "psnr": 29.67,
+      "mse": 70.22,
+      "maxDiff": 86869.7,
+      "elapsedMs": 23.443
+    },
+    {
+      "frame": 40,
+      "ssim": 0.9901,
+      "psnr": 24.76,
+      "mse": 217.07,
+      "maxDiff": 60871.49,
+      "elapsedMs": 23.78
+    },
+    {
+      "frame": 41,
+      "ssim": 0.9903,
+      "psnr": 24.98,
+      "mse": 206.67,
+      "maxDiff": 42658.64,
+      "elapsedMs": 23.794
+    },
+    {
+      "frame": 42,
+      "ssim": 0.9917,
+      "psnr": 25.84,
+      "mse": 169.42,
+      "maxDiff": 29866.15,
+      "elapsedMs": 24.452
+    },
+    {
+      "frame": 43,
+      "ssim": 0.9894,
+      "psnr": 24.24,
+      "mse": 245.04,
+      "maxDiff": 20906.3,
+      "elapsedMs": 25.232
+    },
+    {
+      "frame": 44,
+      "ssim": 0.986,
+      "psnr": 22.73,
+      "mse": 347.09,
+      "maxDiff": 14961.8,
+      "elapsedMs": 23.983
+    },
+    {
+      "frame": 45,
+      "ssim": 0.9826,
+      "psnr": 21.31,
+      "mse": 480.6,
+      "maxDiff": 16865.46,
+      "elapsedMs": 24.286
+    },
+    {
+      "frame": 46,
+      "ssim": 0.9822,
+      "psnr": 21.22,
+      "mse": 490.74,
+      "maxDiff": 16111.55,
+      "elapsedMs": 23.566
+    },
+    {
+      "frame": 47,
+      "ssim": 0.9637,
+      "psnr": 18.02,
+      "mse": 1026.63,
+      "maxDiff": 16679.23,
+      "elapsedMs": 24.238
+    },
+    {
+      "frame": 48,
+      "ssim": 0.9593,
+      "psnr": 17.97,
+      "mse": 1037.9,
+      "maxDiff": 16517.16,
+      "elapsedMs": 24.654
+    },
+    {
+      "frame": 49,
+      "ssim": 0.9445,
+      "psnr": 15.25,
+      "mse": 1942.46,
+      "maxDiff": 19412.97,
+      "elapsedMs": 24.581
+    }
+  ]
+}

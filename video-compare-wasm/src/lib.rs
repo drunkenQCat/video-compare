@@ -5,18 +5,18 @@
 
 use wasm_bindgen::prelude::*;
 
-mod types;
-mod config;
-mod utils;
-mod metrics;
-mod frame_cache;
+pub mod types;
+pub mod config;
+pub mod utils;
+pub mod metrics;
+pub mod frame_cache;
 
 // Re-export for internal use
 use types::{CompareConfig, CompareMetrics};
 use config::{get_config, set_config, init_default};
 use utils::downsample_bilinear;
 use metrics::{compute_block_ssim, compute_block_mse, calculate_psnr};
-use frame_cache::{init_cache, cache_frame_slot, clear_cache, compare_cached, get_cached_diff_rgba};
+use frame_cache::{init_cache, cache_frame_slot, clear_cache, compare_cached, get_cached_diff_rgba, set_ema_alpha};
 
 // ============================================================================
 // wasm-bindgen exports
@@ -122,7 +122,7 @@ pub fn get_compare_config() -> WasmCompareConfig {
 }
 
 /// Internal comparison logic with full diff data output
-fn do_compare_full(
+pub fn do_compare_full(
     left_rgb: &[u8],
     right_rgb: &[u8],
     width: i32,
@@ -486,4 +486,12 @@ pub fn get_diff_rgba() -> js_sys::Uint8Array {
     let arr = js_sys::Uint8Array::new_with_length(rgba.len() as u32);
     arr.copy_from(&rgba);
     arr
+}
+
+/// Set EMA smoothing factor for temporal noise filtering
+/// 0.01 = maximum smoothing, 1.0 = no filtering (instantaneous)
+/// Default: 0.3 (balanced — suppresses compression scatter noise)
+#[wasm_bindgen]
+pub fn set_diff_ema_alpha(alpha: f32) {
+    set_ema_alpha(alpha);
 }

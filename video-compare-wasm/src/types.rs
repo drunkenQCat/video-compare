@@ -31,8 +31,8 @@ pub struct CompareConfig {
 impl Default for CompareConfig {
     fn default() -> Self {
         Self {
-            max_width: 1920,
-            max_height: 1080,
+            max_width: 1280,
+            max_height: 720,
             block_size: 16,
         }
     }
