@@ -34,4 +34,14 @@ npm-package/package-lock.json
 video-compare-wasm/target
 video-compare-wasm/pkg
 video-compare-wasm/pkg-web
-"video-compare-wasm/benches/tmp_frames/"  
+"video-compare-wasm/benches/tmp_frames/"
+video-compare-wasm/node_modules
+
+# Python package build artifacts
+video-compare-py/target
+video-compare-py/.venv
+video-compare-py/diff_output.mp4
+video-compare-py/diff_test.png
+video-compare-py/frame_*.raw
+video-compare-py/python/video_compare/*.pyd
+video-compare-py/python/video_compare/*.pdb
