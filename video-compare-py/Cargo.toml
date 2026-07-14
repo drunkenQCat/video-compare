@@ -1,0 +1,16 @@
+[package]
+name = "video-compare-py"
+version = "2.0.0"
+edition = "2021"
+description = "Video/image comparison library with SSIM, PSNR, MSE metrics — Python bindings"
+
+[lib]
+name = "video_compare"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+
+[profile.release]
+opt-level = 3
+lto = true
