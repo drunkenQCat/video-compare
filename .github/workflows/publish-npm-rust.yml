@@ -56,7 +56,7 @@ jobs:
           cat package.json | jq \
             --arg name "@cfai/video-compare" \
             --arg version "$VERSION" \
-            '.name = $name | .version = $version' > package.json.tmp
+            '.name = $name | .version = $version | .publishConfig = {"access": "public"}' > package.json.tmp
           mv package.json.tmp package.json
 
           echo "Updated package.json:"
