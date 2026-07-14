@@ -37,7 +37,8 @@ jobs:
         with:
           # Node 22.14+ 是 Trusted Publishing 最低要求
           node-version: "22"
-          # 注意: 不使用 registry-url 和 scope — OIDC 自动处理认证
+          registry-url: "https://registry.npmjs.org"
+          scope: "@cfai"
 
       - name: Check versions
         run: |
