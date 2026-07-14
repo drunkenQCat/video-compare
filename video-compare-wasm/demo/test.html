@@ -500,11 +500,6 @@
 
             leftVideo.currentTime = 0;
             rightVideo.currentTime = 0;
-
-            // Hide video elements to eliminate double rendering (browser won't render to DOM)
-            leftVideo.classList.add('hidden-during-compare');
-            rightVideo.classList.add('hidden-during-compare');
-
             await leftVideo.play();
             await rightVideo.play();
 
@@ -566,43 +561,38 @@
             const ctxLeft = document.getElementById('canvas-left').getContext('2d', { willReadFrequently: true });
             const ctxRight = document.getElementById('canvas-right').getContext('2d', { willReadFrequently: true });
 
-            // Use VideoFrame + copyTo to extract pixel data (50x faster than drawImage + getImageData)
+            // Use VideoFrame for fast drawImage (bypasses H.264 decode), then getImageData at target resolution
             if (typeof VideoFrame !== 'undefined') {
                 videoState._useVF = true;
                 const leftFrame = new VideoFrame(leftVideo);
                 const rightFrame = new VideoFrame(rightVideo);
-                const tVF = performance.now();
 
-                // Draw VideoFrame to canvas for display (faster than drawing video element — frame already decoded)
+                // Draw VideoFrame to display canvases at target resolution (fast — frame already decoded)
                 ctxLeft.drawImage(leftFrame, 0, 0, w, h);
                 ctxRight.drawImage(rightFrame, 0, 0, w, h);
-                const tDraw = performance.now();
-
-                // Extract pixel data directly — no getImageData needed
-                const leftBuf = new Uint8ClampedArray(w * h * 4);
-                const rightBuf = new Uint8ClampedArray(w * h * 4);
-                leftFrame.copyTo(leftBuf, { format: 'RGBA' });
-                rightFrame.copyTo(rightBuf, { format: 'RGBA' });
-                const tCopy = performance.now();
-
                 leftFrame.close();
                 rightFrame.close();
+                const tDraw = performance.now();
+
+                // Get RGBA data at target resolution (not full-res — saves bandwidth)
+                const leftImg = ctxLeft.getImageData(0, 0, w, h);
+                const rightImg = ctxRight.getImageData(0, 0, w, h);
+                const tGetImage = performance.now();
 
                 videoState._t0 = t0;
                 videoState._tDraw = tDraw;
-                videoState._tGetImage = tCopy;
-
-                videoState.waiting = true;
+                videoState._tGetImage = tGetImage;
                 videoState._tPostMsg = performance.now();
+                videoState.waiting = true;
                 worker.postMessage(
                     {
                         type: 'compare',
-                        leftRGBA: leftBuf,
-                        rightRGBA: rightBuf,
+                        leftRGBA: leftImg.data,
+                        rightRGBA: rightImg.data,
                         width: w,
                         height: h
                     },
-                    [leftBuf.buffer, rightBuf.buffer]
+                    [leftImg.data.buffer, rightImg.data.buffer]
                 );
             } else {
                 // Fallback: drawImage + getImageData
@@ -642,9 +632,11 @@
 
             const { ssim, psnr, mse, maxDiff, rgba, width, height } = data;
 
-            // Render diff to canvas
+            // Render diff to canvas — resize canvas to match actual output dimensions
             const canvasDiff = document.getElementById('canvas-diff');
             const ctxDiff = canvasDiff.getContext('2d');
+            canvasDiff.width = width;
+            canvasDiff.height = height;
             const diffImg = ctxDiff.createImageData(width, height);
             diffImg.data.set(rgba);
             ctxDiff.putImageData(diffImg, 0, 0);
@@ -690,13 +682,8 @@
             videoState.playing = false;
             videoState.waiting = false;
 
-            const leftVideo = document.getElementById('video-left-preview');
-            const rightVideo = document.getElementById('video-right-preview');
-            leftVideo.pause();
-            rightVideo.pause();
-            // Restore video visibility
-            leftVideo.classList.remove('hidden-during-compare');
-            rightVideo.classList.remove('hidden-during-compare');
+            document.getElementById('video-left-preview').pause();
+            document.getElementById('video-right-preview').pause();
             document.getElementById('start-btn').disabled = false;
             document.getElementById('stop-btn').disabled = true;
         };

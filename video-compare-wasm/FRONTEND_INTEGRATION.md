@@ -14,6 +14,7 @@
   - [类型定义](#类型定义)
 - [帧提取：从 video 元素获取 RGB 数据](#帧提取从-video-元素获取-rgb-数据)
 - [完整示例：实时视频对比](#完整示例实时视频对比)
+- [前端最佳实践](#前端最佳实践)
 - [自动降采样机制](#自动降采样机制)
 - [性能基线（WASM Benchmark）](#性能基线wasm-benchmark)
 - [构建产物说明](#构建产物说明)
@@ -316,61 +317,45 @@ class WasmCompareConfig {
 
 ## 帧提取：从 video 元素获取像素数据
 
-WASM 帧缓存 API 接受 RGB 数据（3 字节/像素）。从 `<video>` 提取帧有两种方案：
+WASM 帧缓存 API 接受 RGB 数据（3 字节/像素）。从 `<video>` 提取帧有两步：绘制到 canvas + 读取像素数据。关键是**绕过 H.264 软解码瓶颈**。
 
-### 方案 A（推荐）：VideoFrame + copyTo
+### 推荐方案：VideoFrame + drawImage + getImageData
 
-使用 WebCodecs `VideoFrame` API，直接从已解码视频帧拷贝像素数据。**比 canvas 路径快 50 倍**（0.1ms vs 5ms/帧）。
-
-```typescript
-function extractRGBA(video: HTMLVideoElement, w: number, h: number): Uint8ClampedArray {
-  const frame = new VideoFrame(video);
-  const buf = new Uint8ClampedArray(w * h * 4); // RGBA
-  frame.copyTo(buf, { format: 'RGBA' });
-  frame.close(); // 必须调用，释放 GPU 内存
-  return buf;
-}
-```
-
-> **要求：** Chrome/Edge 94+。Safari 和 Firefox 暂不支持 `VideoFrame`，需 fallback。
-> **注意：** `VideoFrame` 返回 RGBA 数据（4 字节/像素），Worker 中会做 RGBA→RGB 转换。
-
-### 方案 B（Fallback）：drawImage + getImageData
-
-不支持的浏览器走 canvas 路径。慢但兼容性广。
+`drawImage(video)` 慢（~25ms/帧），因为它每次都触发 H.264 解码。`VideoFrame` 捕获**已解码帧**，`drawImage(videoFrame)` 只做绘制（~0.4ms），快 60 倍。
 
 ```typescript
 const canvas = document.createElement('canvas');
 const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+const useVideoFrame = typeof VideoFrame !== 'undefined';
 
 function extractRGBA(video: HTMLVideoElement, w: number, h: number): Uint8ClampedArray {
   canvas.width = w;
   canvas.height = h;
-  ctx.drawImage(video, 0, 0, w, h);
+
+  if (useVideoFrame) {
+    // VideoFrame 捕获已解码帧，drawImage 不再触发 H.264 解码
+    const frame = new VideoFrame(video);
+    ctx.drawImage(frame, 0, 0, w, h);
+    frame.close(); // 必须调用，释放 GPU 内存
+  } else {
+    // Fallback: 直接 drawImage(video)，慢但兼容性广
+    ctx.drawImage(video, 0, 0, w, h);
+  }
+
   return ctx.getImageData(0, 0, w, h).data; // Uint8ClampedArray (RGBA)
 }
 ```
 
-### 运行时自动选择
+> **要求：** VideoFrame 需要 Chrome/Edge 94+。Safari 和 Firefox 不支持，自动 fallback 到 `drawImage(video)`。
+> **为什么不用 `copyTo`：** `copyTo` 在持续播放时需要同步 GPU 解码管线，实测 24.9ms/帧（暂停时仅 5.5ms）。此外 `codedHeight` 可能不等于 `videoHeight`（H.264 宏块对齐），导致 buffer 大小不匹配。`drawImage + getImageData` 没有这些问题。
 
-```typescript
-const useVideoFrame = typeof VideoFrame !== 'undefined';
+### 性能对比（720p，headless Chrome，真实视频）
 
-function extractRGBA(video: HTMLVideoElement, w: number, h: number): Uint8ClampedArray {
-  if (useVideoFrame) {
-    const frame = new VideoFrame(video);
-    const buf = new Uint8ClampedArray(w * h * 4);
-    frame.copyTo(buf, { format: 'RGBA' });
-    frame.close();
-    return buf;
-  } else {
-    canvas.width = w;
-    canvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
-    return ctx.getImageData(0, 0, w, h).data;
-  }
-}
-```
+| 方法 | drawImage | 像素提取 | 总计 |
+|---|---|---|---|
+| `drawImage(video) + getImageData` | 25.3ms | 4.3ms | 29.6ms |
+| `VideoFrame + copyTo` | — | 24.9ms | 24.9ms |
+| **`VideoFrame + drawImage + getImageData`** | **0.4ms** | **7.0ms** | **7.4ms** |
 
 ---
 
@@ -383,16 +368,16 @@ function extractRGBA(video: HTMLVideoElement, w: number, h: number): Uint8Clampe
 **推荐架构：**
 
 ```
-主线程                          Worker
-──────                          ──────
-requestVideoFrameCallback       WASM 模块
-  → VideoFrame(video)             ↓
-  → copyTo → RGBA buffer         init_frame_cache()
-  → postMessage(RGBA) ──────→    cache_frame(0, left)
-                                 cache_frame(1, right)
-                                 compare_cached_frames()
-                                 get_diff_rgba()
-  ← postMessage(diffRGBA) ←─────
+主线程                                    Worker
+──────                                    ──────
+requestVideoFrameCallback                 WASM 模块
+  → new VideoFrame(video)                  ↓
+  → drawImage(frame, 1280×720)           rgbaToRgb()
+  → getImageData(1280×720)               init_frame_cache()
+  → frame.close()                        cache_frame(0, leftRGB)
+  → postMessage(RGBA) ──────────→       cache_frame(1, rightRGB)
+                                         compare_cached_frames()
+  ← postMessage(diffRGBA) ←────────     get_diff_rgba()
   → putImageData(diffCanvas)
 ```
 
@@ -472,18 +457,17 @@ const useVideoFrame = typeof VideoFrame !== 'undefined';
 let waiting = false;
 
 function extractRGBA(video: HTMLVideoElement, w: number, h: number): Uint8ClampedArray {
+  displayCanvas.width = w;
+  displayCanvas.height = h;
   if (useVideoFrame) {
+    // VideoFrame 捕获已解码帧，drawImage 不触发 H.264 解码
     const frame = new VideoFrame(video);
-    const buf = new Uint8ClampedArray(w * h * 4);
-    frame.copyTo(buf, { format: 'RGBA' });
-    // 同时画到显示 canvas
     displayCtx.drawImage(frame, 0, 0, w, h);
     frame.close();
-    return buf;
   } else {
     displayCtx.drawImage(video, 0, 0, w, h);
-    return displayCtx.getImageData(0, 0, w, h).data;
   }
+  return displayCtx.getImageData(0, 0, w, h).data;
 }
 
 function frameLoop() {
@@ -512,10 +496,15 @@ function handleResult(data: { ssim: number; psnr: number; mse: number; rgba: Uin
   waiting = false;
   const { ssim, psnr, mse, rgba, width, height } = data;
 
-  // 渲染差异画面
-  diffCanvas.width = width;
-  diffCanvas.height = height;
-  const imgData = diffCtx.createImageData(width, height);
+  // 渲染差异画面 — 用 rgba 数据反算实际输出尺寸（WASM 可能降采样）
+  const pixelCount = rgba.length / 4;
+  const aspectRatio = width / height;
+  const outH = Math.round(Math.sqrt(pixelCount / aspectRatio));
+  const outW = Math.round(pixelCount / outH);
+
+  diffCanvas.width = outW;
+  diffCanvas.height = outH;
+  const imgData = diffCtx.createImageData(outW, outH);
   imgData.data.set(rgba);
   diffCtx.putImageData(imgData, 0, 0);
 
@@ -528,10 +517,25 @@ frameLoop();
 ```
 
 > **关键优化点：**
-> 1. `VideoFrame + copyTo` 替代 `drawImage + getImageData` — 快 50 倍
+> 1. `VideoFrame + drawImage` 替代 `drawImage(video)` — 绕过 H.264 软解码，快 60 倍
 > 2. Web Worker 隔离 WASM 计算 — 主线程不卡顿
 > 3. `requestVideoFrameCallback` 替代 `requestAnimationFrame` — 只在有新帧时处理
 > 4. Transferable `ArrayBuffer` — Worker 间零拷贝传输
+> 5. 从 `rgba.length` 反算输出尺寸 — 不依赖 WASM 报告的维度（可能因降采样而不一致）
+
+### 前端最佳实践
+
+1. **不要隐藏 `<video>` 元素**（`display: none`）：浏览器会停止解码视频帧，`VideoFrame` 拿到空帧。如需隐藏播放器，用 `visibility: hidden` 或移出视口，不要用 `display: none`。
+
+2. **不要用 `VideoFrame.copyTo()` 提取像素**：持续播放时 `copyTo` 要同步 GPU 解码管线（24.9ms/帧），且 `codedHeight` 可能 ≠ `videoHeight`（H.264 宏块对齐导致 buffer 不匹配）。用 `drawImage(videoFrame) + getImageData` 替代。
+
+3. **WASM 输出尺寸 ≠ 输入尺寸**：WASM 有自动降采样（>1280×720 的输入会降采样）。从 `rgba.length` 反算实际输出尺寸，不要用输入尺寸创建 `ImageData`。
+
+4. **`requestVideoFrameCallback` 替代 `requestAnimationFrame`**：视频是 24fps，rAF 是 60fps。用 rVFC 只在有新帧时触发处理，避免不必要的计算。不支持的浏览器 fallback 到 rAF。
+
+5. **Transferable ArrayBuffer**：`postMessage` 时用 transfer list（`[buf.buffer]`）零拷贝传输，避免序列化开销。
+
+6. **Worker 中做 RGBA→RGB 转换**：`getImageData` 返回 RGBA（4 字节/像素），WASM 需要 RGB（3 字节/像素）。在 Worker 中做转换，不占主线程时间。
 
 ---
 
@@ -703,3 +707,23 @@ await init(); // 异步加载 WASM，只需调用一次
 ### Q: SSIM 值偏低，是否正常？
 
 SSIM 的分块计算（block-based）比全图 SSIM 更敏感。`blockSize=16` 时，SSIM 通常在 0.85-0.99 之间。如果两帧有微小平移或压缩差异，SSIM 可能降到 0.7-0.8。这是正常行为。
+
+### Q: 差异画面扭曲/斜了？
+
+WASM 有自动降采样，输出 rgba 数据的尺寸可能与输入不同。不要用输入尺寸创建 `ImageData`，要从 `rgba.length` 反算实际输出尺寸：
+
+```typescript
+const pixelCount = rgba.length / 4;
+const outH = Math.round(Math.sqrt(pixelCount / (width / height)));
+const outW = Math.round(pixelCount / outH);
+canvas.width = outW;
+canvas.height = outH;
+```
+
+### Q: `VideoFrame.copyTo` 报 "destination is not large enough"？
+
+`VideoFrame.codedHeight` 可能 ≠ `video.videoHeight`（H.264 宏块对齐 padding）。`copyTo` 按 `codedWidth × codedHeight` 分配内存，按 `videoWidth × videoHeight` 分配会不足。**建议不使用 `copyTo`**，改用 `drawImage(videoFrame) + getImageData`，在目标分辨率提取像素。
+
+### Q: 隐藏 video 元素后画面全黑？
+
+`display: none` 会导致浏览器停止视频解码，`VideoFrame` 拿到空帧。如需隐藏播放器，用 `visibility: hidden` 或移出视口，不要用 `display: none`。

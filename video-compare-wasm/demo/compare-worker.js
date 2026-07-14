@@ -42,6 +42,26 @@ function rgbaToRgb(rgba, width, height) {
   return rgb;
 }
 
+/** Downsample RGBA data using nearest-neighbor (fast) */
+function downsampleRGBA(src, srcW, srcH, dstW, dstH) {
+  const dst = new Uint8ClampedArray(dstW * dstH * 4);
+  const xRatio = srcW / dstW;
+  const yRatio = srcH / dstH;
+  for (let y = 0; y < dstH; y++) {
+    for (let x = 0; x < dstW; x++) {
+      const sx = Math.floor(x * xRatio);
+      const sy = Math.floor(y * yRatio);
+      const sIdx = (sy * srcW + sx) * 4;
+      const dIdx = (y * dstW + x) * 4;
+      dst[dIdx]     = src[sIdx];
+      dst[dIdx + 1] = src[sIdx + 1];
+      dst[dIdx + 2] = src[sIdx + 2];
+      dst[dIdx + 3] = 255;
+    }
+  }
+  return dst;
+}
+
 self.onmessage = async (e) => {
   const { type } = e.data;
 
@@ -70,7 +90,7 @@ self.onmessage = async (e) => {
         await ensureWasm();
         const { leftRGBA, rightRGBA, width, height } = e.data;
 
-        // Convert RGBA→RGB in worker (video has no alpha, strip it)
+        // Convert RGBA→RGB (strip alpha — video has no alpha)
         const leftRGB = rgbaToRgb(leftRGBA, width, height);
         const rightRGB = rgbaToRgb(rightRGBA, width, height);
 
@@ -80,8 +100,26 @@ self.onmessage = async (e) => {
         const [ssim, psnr, mse, maxDiff] = compare_cached_frames();
         const rgba = get_diff_rgba();
 
+        // Derive actual output dimensions from rgba data size + input aspect ratio
+        // (WASM may auto-downsample, and VideoFrame codedWidth may differ from videoWidth)
+        const pixelCount = rgba.length / 4;
+        const inputAspect = width / height;
+        let outH = Math.round(Math.sqrt(pixelCount / inputAspect));
+        let outW = Math.round(pixelCount / outH);
+        // Verify: should match pixelCount
+        if (outW * outH !== pixelCount) {
+          // Fallback: try to find dimensions that match
+          for (let h = Math.floor(Math.sqrt(pixelCount)); h >= 1; h--) {
+            if (pixelCount % h === 0) {
+              outH = h;
+              outW = pixelCount / h;
+              break;
+            }
+          }
+        }
+
         self.postMessage(
-          { type: 'result', ssim, psnr, mse, maxDiff, rgba, width, height },
+          { type: 'result', ssim, psnr, mse, maxDiff, rgba, width: outW, height: outH },
           [rgba.buffer]
         );
         break;
