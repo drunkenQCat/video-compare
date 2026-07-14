@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Compare Wasm</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: system-ui; padding: 15px; max-width: 1000px; margin: auto; background: #f0f0f0; }
+        h1 { color: #333; margin: 0; padding: 15px; background: #007bff; color: white; border-radius: 8px 8px 0 0; }
+
+        /* Tabs */
+        .tabs { display: flex; background: white; border-bottom: 1px solid #ddd; }
+        .tab { padding: 12px 24px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab:hover { background: #f5f5f5; }
+        .tab.active { border-bottom-color: #007bff; color: #007bff; }
+        .tab-content { display: none; padding: 20px; background: white; border-radius: 0 0 8px 8px; }
+        .tab-content.active { display: block; }
+
+        /* Section */
+        .section { background: white; padding: 20px; border-radius: 8px; margin: 15px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .section h3 { margin: 0 0 15px 0; color: #555; font-size: 16px; }
+
+        /* Options */
+        .options-row { display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; }
+        .option-group { display: flex; align-items: center; gap: 8px; }
+        .option-group label { font-size: 13px; color: #555; }
+        .option-group select, .option-group input[type="range"] { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+
+        /* File inputs */
+        .file-inputs { display: flex; gap: 15px; }
+        .file-box { flex: 1; padding: 15px; border: 2px dashed #ddd; border-radius: 8px; text-align: center; transition: all 0.2s; }
+        .file-box:hover { border-color: #007bff; }
+        .file-box.has-file { border-color: #28a745; border-style: solid; background: #f8fff8; }
+        .file-box input[type="file"] { display: none; }
+        .file-box label { display: block; cursor: pointer; }
+        .file-box .filename { font-size: 12px; color: #666; margin-top: 8px; word-break: break-all; }
+        .file-box video, .file-box canvas { max-width: 100%; max-height: 200px; margin-top: 10px; display: none; }
+        .file-box video.visible, .file-box canvas.visible { display: block; }
+        .file-box video.hidden-during-compare { display: none !important; }
+
+        /* Buttons */
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover:not(:disabled) { background: #0056b3; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-danger:hover:not(:disabled) { background: #c82333; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-row { display: flex; gap: 10px; margin-top: 15px; }
+
+        /* Video display */
+        .video-display { display: none; margin-top: 20px; }
+        .video-display.visible { display: block; }
+        .video-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .video-panel { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+        .video-panel h4 { margin: 0; padding: 8px; background: #f5f5f5; font-size: 13px; text-align: center; }
+        .video-panel canvas { width: 100%; display: block; background: #000; }
+
+        /* Metrics */
+        .metrics-row { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        .metric-box { flex: 1; min-width: 80px; padding: 12px; background: #f8f9fa; border-radius: 6px; text-align: center; }
+        .metric-box .value { font-size: 22px; font-weight: bold; }
+        .metric-box .label { font-size: 11px; color: #666; margin-top: 4px; }
+        .metric-box.ssim .value { color: #28a745; }
+        .metric-box.psnr .value { color: #17a2b8; }
+        .metric-box.mse .value { color: #dc3545; }
+
+        /* Chart */
+        .chart-section { margin-top: 15px; }
+        .chart-container { height: 120px; background: #f8f9fa; border-radius: 8px; padding: 10px; position: relative; }
+        .chart-container canvas { width: 100%; height: 100%; }
+
+        /* Progress */
+        .progress-bar { height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; margin-top: 10px; }
+        .progress-bar .fill { height: 100%; background: #007bff; transition: width 0.1s; width: 0%; }
+
+        /* Status */
+        .status-bar { padding: 10px 15px; background: #f8f9fa; border-radius: 4px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+        .status-bar .frame-info { color: #666; }
+
+        /* Diff visualization */
+        .diff-section { display: none; margin-top: 15px; }
+        .diff-section.visible { display: block; }
+        .diff-container { display: flex; gap: 15px; align-items: flex-start; }
+        .diff-canvas-wrapper { flex: 1; text-align: center; }
+        .diff-canvas-wrapper canvas { border: 1px solid #ddd; max-width: 100%; }
+        .diff-info { flex: 0 0 180px; padding: 12px; background: #f8f9fa; border-radius: 8px; font-size: 12px; }
+        .color-bar { height: 16px; background: linear-gradient(to right, #0000ff, #00ff00, #ffff00, #ff0000); border-radius: 3px; margin: 8px 0; }
+        .color-bar-labels { display: flex; justify-content: space-between; font-size: 10px; color: #666; }
+
+        #wasm-status { padding: 8px; border-radius: 4px; text-align: center; margin-bottom: 15px; }
+        #wasm-status.ready { background: #d4edda; color: #155724; }
+        #wasm-status.error { background: #f8d7da; color: #721c24; }
+        #wasm-status.worker { background: #d1ecf1; color: #0c5460; }
+
+        .ema-control { display: flex; align-items: center; gap: 8px; }
+        .ema-control input[type="range"] { width: 100px; }
+        .ema-value { font-size: 12px; color: #666; min-width: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Video Compare Wasm</h1>
+    <div id="wasm-status" class="ready">✅ Ready</div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <div class="tab active" data-tab="video">🎥 Video Comparison</div>
+        <div class="tab" data-tab="image">🖼️ Image Comparison</div>
+    </div>
+
+    <!-- Video Tab -->
+    <div class="tab-content active" id="video-tab">
+        <div class="section">
+            <h3>Upload Videos</h3>
+            <div class="options-row">
+                <div class="option-group">
+                    <label>Resolution:</label>
+                    <select id="video-res">
+                        <option value="480">480p (fast)</option>
+                        <option value="720" selected>720p</option>
+                        <option value="1080">1080p (auto-downsampled)</option>
+                    </select>
+                </div>
+                <div class="option-group ema-control">
+                    <label>Noise Filter:</label>
+                    <input type="range" id="ema-alpha" min="0.05" max="1.0" step="0.05" value="1.0">
+                    <span class="ema-value" id="ema-value">1.00</span>
+                </div>
+            </div>
+
+            <div class="file-inputs">
+                <div class="file-box" id="video-left-box">
+                    <input type="file" id="video-left" accept="video/*" onchange="handleVideoFile(this, 'left')">
+                    <label for="video-left">
+                        <strong>▶️ Reference Video</strong>
+                        <br><span style="color:#888;font-size:12px">MP4/WebM/MOV</span>
+                    </label>
+                    <video id="video-left-preview" muted></video>
+                    <div class="filename" id="video-left-name"></div>
+                </div>
+                <div class="file-box" id="video-right-box">
+                    <input type="file" id="video-right" accept="video/*" onchange="handleVideoFile(this, 'right')">
+                    <label for="video-right">
+                        <strong>▶️ Compare Video</strong>
+                        <br><span style="color:#888;font-size:12px">MP4/WebM/MOV</span>
+                    </label>
+                    <video id="video-right-preview" muted></video>
+                    <div class="filename" id="video-right-name"></div>
+                </div>
+            </div>
+
+            <div class="btn-row">
+                <button class="btn btn-primary" id="start-btn" onclick="startVideoCompare()" disabled>▶️ Start Comparison</button>
+                <button class="btn btn-danger" id="stop-btn" onclick="stopVideoCompare()" disabled>⏹️ Stop</button>
+            </div>
+        </div>
+
+        <!-- Video display -->
+        <div class="video-display" id="video-display">
+            <div class="section">
+                <div class="status-bar">
+                    <span class="frame-info" id="frame-info">Frame: 0</span>
+                    <span id="time-info">Time: 0.00s</span>
+                    <span id="fps-info">FPS: --</span>
+                </div>
+                <div class="progress-bar"><div class="fill" id="progress-fill"></div></div>
+
+                <div class="video-grid">
+                    <div class="video-panel">
+                        <h4>Reference</h4>
+                        <canvas id="canvas-left"></canvas>
+                    </div>
+                    <div class="video-panel">
+                        <h4>Compare</h4>
+                        <canvas id="canvas-right"></canvas>
+                    </div>
+                    <div class="video-panel">
+                        <h4>Difference</h4>
+                        <canvas id="canvas-diff"></canvas>
+                    </div>
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric-box ssim"><div class="value" id="ssim-value">-</div><div class="label">SSIM</div></div>
+                    <div class="metric-box psnr"><div class="value" id="psnr-value">-</div><div class="label">PSNR (dB)</div></div>
+                    <div class="metric-box mse"><div class="value" id="mse-value">-</div><div class="label">MSE</div></div>
+                    <div class="metric-box"><div class="value" id="avg-ssim">-</div><div class="label">Avg SSIM</div></div>
+                </div>
+
+                <div class="chart-section">
+                    <h4>📈 SSIM Trend</h4>
+                    <div class="chart-container"><canvas id="chart-canvas"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Tab -->
+    <div class="tab-content" id="image-tab">
+        <div class="section">
+            <h3>Upload Images</h3>
+            <div class="options-row">
+                <div class="option-group">
+                    <label>Display:</label>
+                    <select id="display-mode">
+                        <option value="pixel">Pixel (fine)</option>
+                        <option value="block">Block (fast)</option>
+                    </select>
+                </div>
+                <div class="option-group">
+                    <label>Block Size:</label>
+                    <select id="block-size">
+                        <option value="4">4x4</option>
+                        <option value="8">8x8</option>
+                        <option value="16" selected>16x16</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="file-inputs">
+                <div class="file-box" id="image-left-box">
+                    <input type="file" id="image-left" accept="image/*" onchange="handleImageFile(this, 'left')">
+                    <label for="image-left"><strong>Left Image</strong></label>
+                    <canvas id="image-left-canvas"></canvas>
+                    <div class="filename" id="image-left-name"></div>
+                </div>
+                <div class="file-box" id="image-right-box">
+                    <input type="file" id="image-right" accept="image/*" onchange="handleImageFile(this, 'right')">
+                    <label for="image-right"><strong>Right Image</strong></label>
+                    <canvas id="image-right-canvas"></canvas>
+                    <div class="filename" id="image-right-name"></div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" id="compare-img-btn" onclick="compareImages()" disabled style="width:100%">Compare Images</button>
+
+            <div class="diff-section" id="image-diff-section">
+                <div class="metrics-row" id="image-metrics"></div>
+                <div class="diff-container" style="margin-top:15px">
+                    <div class="diff-canvas-wrapper">
+                        <canvas id="image-diff-canvas"></canvas>
+                    </div>
+                    <div class="diff-info">
+                        <div class="color-bar"></div>
+                        <div class="color-bar-labels"><span>Same</span><span>Diff</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // ====================================================================
+        // Image comparison: direct WASM import (one-shot, no perf issue)
+        // ====================================================================
+        import init, {
+            compare, compare_with_diff, compute_pixel_diff,
+            get_diff_data, get_pixel_diff_data,
+            set_compare_config, get_compare_config, get_block_count,
+            WasmCompareConfig
+        } from './video_compare_wasm.js';
+
+        // ====================================================================
+        // Video comparison: Web Worker (offloads WASM from main thread)
+        // ====================================================================
+        let worker = null;
+        let workerReady = false;
+
+        function initWorker() {
+            if (worker) return;
+            worker = new Worker('./compare-worker.js', { type: 'module' });
+            worker.postMessage({ type: 'init' });
+            worker.onmessage = onWorkerMessage;
+            worker.onerror = (e) => {
+                console.error('Worker error:', e);
+                document.getElementById('wasm-status').className = 'error';
+                document.getElementById('wasm-status').textContent = '❌ Worker error: ' + e.message;
+            };
+        }
+
+        function onWorkerMessage(e) {
+            const { type } = e.data;
+            switch (type) {
+                case 'ready':
+                    workerReady = true;
+                    document.getElementById('wasm-status').className = 'worker';
+                    document.getElementById('wasm-status').textContent = '✅ Worker ready (WASM offloaded from main thread)';
+                    // Send initial config
+                    sendWorkerConfig();
+                    break;
+                case 'result':
+                    handleWorkerResult(e.data);
+                    break;
+                case 'configured':
+                    break;
+                case 'error':
+                    console.error('Worker computation error:', e.data.error);
+                    break;
+            }
+        }
+
+        function sendWorkerConfig() {
+            if (!worker || !workerReady) return;
+            const emaAlpha = parseFloat(document.getElementById('ema-alpha').value);
+            worker.postMessage({
+                type: 'config',
+                maxWidth: 1280,
+                maxHeight: 720,
+                blockSize: 16,
+                emaAlpha
+            });
+        }
+
+        // EMA slider
+        document.getElementById('ema-alpha').addEventListener('input', (e) => {
+            document.getElementById('ema-value').textContent = parseFloat(e.target.value).toFixed(2);
+        });
+        document.getElementById('ema-alpha').addEventListener('change', sendWorkerConfig);
+
+        // Initialize WASM (for image comparison) + Worker (for video comparison)
+        init().then(() => {
+            console.log('Wasm ready (image comparison)');
+            updateBlockConfig();
+            initWorker();
+        }).catch(err => {
+            document.getElementById('wasm-status').className = 'error';
+            document.getElementById('wasm-status').textContent = '❌ Error: ' + err;
+        });
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+            });
+        });
+
+        // Config for image comparison
+        function updateBlockConfig() {
+            const blockSize = parseInt(document.getElementById('block-size')?.value || 16);
+            set_compare_config(new WasmCompareConfig(1280, 720, blockSize));
+        }
+        document.getElementById('block-size')?.addEventListener('change', updateBlockConfig);
+
+        // ====================================================================
+        // IMAGE COMPARISON (runs on main thread — one-shot, no blocking)
+        // ====================================================================
+
+        let leftImageData = null, rightImageData = null;
+
+        window.handleImageFile = function(input, side) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const box = document.getElementById('image-' + side + '-box');
+            const canvas = document.getElementById('image-' + side + '-canvas');
+            const nameEl = document.getElementById('image-' + side + '-name');
+
+            const img = new Image();
+            img.onload = () => {
+                canvas.width = Math.min(img.width, 200);
+                canvas.height = Math.min(img.height, 150);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.classList.add('visible');
+
+                const tmpCanvas = document.createElement('canvas');
+                tmpCanvas.width = img.width;
+                tmpCanvas.height = img.height;
+                const ctx = tmpCanvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const data = ctx.getImageData(0, 0, img.width, img.height);
+
+                const rgb = new Uint8Array(img.width * img.height * 3);
+                for (let i = 0; i < img.width * img.height; i++) {
+                    rgb[i*3] = data.data[i*4];
+                    rgb[i*3+1] = data.data[i*4+1];
+                    rgb[i*3+2] = data.data[i*4+2];
+                }
+
+                if (side === 'left') leftImageData = { rgb, width: img.width, height: img.height };
+                else rightImageData = { rgb, width: img.width, height: img.height };
+
+                box.classList.add('has-file');
+                nameEl.textContent = file.name;
+                document.getElementById('compare-img-btn').disabled = !(leftImageData && rightImageData);
+            };
+            img.src = URL.createObjectURL(file);
+        };
+
+        window.compareImages = function() {
+            if (!leftImageData || !rightImageData) return;
+            if (leftImageData.width !== rightImageData.width || leftImageData.height !== rightImageData.height) {
+                alert('Dimensions must match!');
+                return;
+            }
+
+            const metrics = compare(leftImageData.rgb, rightImageData.rgb, leftImageData.width, leftImageData.height);
+            const pixelResult = compute_pixel_diff(leftImageData.rgb, rightImageData.rgb, leftImageData.width, leftImageData.height);
+            const pixelData = get_pixel_diff_data(pixelResult);
+
+            document.getElementById('image-metrics').innerHTML = `
+                <div class="metric-box ssim"><div class="value">${metrics.ssim.toFixed(4)}</div><div class="label">SSIM</div></div>
+                <div class="metric-box psnr"><div class="value">${metrics.psnr.toFixed(2)}</div><div class="label">PSNR</div></div>
+                <div class="metric-box mse"><div class="value">${metrics.mse.toFixed(2)}</div><div class="label">MSE</div></div>
+                <div class="metric-box"><div class="value">${leftImageData.width}x${leftImageData.height}</div><div class="label">Size</div></div>
+            `;
+
+            const canvas = document.getElementById('image-diff-canvas');
+            const scale = Math.min(400 / leftImageData.width, 1);
+            canvas.width = Math.floor(leftImageData.width * scale);
+            canvas.height = Math.floor(leftImageData.height * scale);
+
+            const ctx = canvas.getContext('2d');
+            const imgData = ctx.createImageData(canvas.width, canvas.height);
+            const arr = Array.from(pixelData);
+
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const srcIdx = Math.floor(y/scale) * leftImageData.width + Math.floor(x/scale);
+                    const [r,g,b] = diffToColor(arr[srcIdx], pixelResult.max_diff);
+                    const dstIdx = (y * canvas.width + x) * 4;
+                    imgData.data[dstIdx] = r;
+                    imgData.data[dstIdx+1] = g;
+                    imgData.data[dstIdx+2] = b;
+                    imgData.data[dstIdx+3] = 255;
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+            document.getElementById('image-diff-section').classList.add('visible');
+        };
+
+        // ====================================================================
+        // VIDEO COMPARISON (runs in Web Worker — main thread stays free)
+        // ====================================================================
+
+        let videoState = {
+            playing: false,
+            width: 1280,
+            height: 720,
+            startTime: 0,
+            frameCount: 0,
+            ssimHistory: [],
+            waiting: false
+        };
+
+        window.handleVideoFile = function(input, side) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const box = document.getElementById('video-' + side + '-box');
+            const video = document.getElementById('video-' + side + '-preview');
+            const nameEl = document.getElementById('video-' + side + '-name');
+
+            video.src = URL.createObjectURL(file);
+            video.classList.add('visible');
+            video.load();
+
+            box.classList.add('has-file');
+            nameEl.textContent = file.name;
+
+            checkVideosReady();
+        };
+
+        function checkVideosReady() {
+            const left = document.getElementById('video-left-preview');
+            const right = document.getElementById('video-right-preview');
+            if (left.src && right.src) {
+                document.getElementById('start-btn').disabled = false;
+            }
+        }
+
+        window.startVideoCompare = async function() {
+            if (!workerReady) {
+                alert('Worker not ready yet!');
+                return;
+            }
+
+            const leftVideo = document.getElementById('video-left-preview');
+            const rightVideo = document.getElementById('video-right-preview');
+
+            const targetRes = parseInt(document.getElementById('video-res').value);
+            const res = targetRes === 480 ? { w: 854, h: 480 } : targetRes === 720 ? { w: 1280, h: 720 } : { w: 1920, h: 1080 };
+
+            videoState.width = res.w;
+            videoState.height = res.h;
+
+            const canvasLeft = document.getElementById('canvas-left');
+            const canvasRight = document.getElementById('canvas-right');
+            const canvasDiff = document.getElementById('canvas-diff');
+
+            canvasLeft.width = res.w; canvasLeft.height = res.h;
+            canvasRight.width = res.w; canvasRight.height = res.h;
+            canvasDiff.width = res.w; canvasDiff.height = res.h;
+
+            document.getElementById('video-display').classList.add('visible');
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('stop-btn').disabled = false;
+
+            leftVideo.currentTime = 0;
+            rightVideo.currentTime = 0;
+
+            // Hide video elements to eliminate double rendering (browser won't render to DOM)
+            leftVideo.classList.add('hidden-during-compare');
+            rightVideo.classList.add('hidden-during-compare');
+
+            await leftVideo.play();
+            await rightVideo.play();
+
+            videoState.playing = true;
+            videoState.startTime = performance.now();
+            videoState.frameCount = 0;
+            videoState.ssimHistory = [];
+            videoState.waiting = false;
+
+            // Use requestVideoFrameCallback if available — fires only when a new video frame is ready
+            // Falls back to rAF if not supported
+            if (leftVideo.requestVideoFrameCallback) {
+                videoState._useRVFC = true;
+                leftVideo.requestVideoFrameCallback(videoFrameLoop);
+            } else {
+                videoState._useRVFC = false;
+                requestAnimationFrame(videoFrameLoop);
+            }
+        };
+
+        function scheduleNextFrame() {
+            if (!videoState.playing) return;
+            const leftVideo = document.getElementById('video-left-preview');
+            if (videoState._useRVFC && leftVideo.requestVideoFrameCallback) {
+                leftVideo.requestVideoFrameCallback(videoFrameLoop);
+            } else {
+                requestAnimationFrame(videoFrameLoop);
+            }
+        }
+
+        // Performance instrumentation — exposed as window.__perf__ for headless testing
+        const perf = {
+            frames: [],
+            summary: null,
+        };
+        window.__perf__ = perf;
+
+        function videoFrameLoop() {
+            if (!videoState.playing) return;
+
+            // Skip if worker still processing previous frame
+            if (videoState.waiting) {
+                scheduleNextFrame();
+                return;
+            }
+
+            const leftVideo = document.getElementById('video-left-preview');
+            const rightVideo = document.getElementById('video-right-preview');
+
+            if (leftVideo.currentTime >= leftVideo.duration || leftVideo.ended) {
+                stopVideoCompare();
+                return;
+            }
+
+            const w = videoState.width;
+            const h = videoState.height;
+            const t0 = performance.now();
+
+            const ctxLeft = document.getElementById('canvas-left').getContext('2d', { willReadFrequently: true });
+            const ctxRight = document.getElementById('canvas-right').getContext('2d', { willReadFrequently: true });
+
+            // Use VideoFrame + copyTo to extract pixel data (50x faster than drawImage + getImageData)
+            if (typeof VideoFrame !== 'undefined') {
+                videoState._useVF = true;
+                const leftFrame = new VideoFrame(leftVideo);
+                const rightFrame = new VideoFrame(rightVideo);
+                const tVF = performance.now();
+
+                // Draw VideoFrame to canvas for display (faster than drawing video element — frame already decoded)
+                ctxLeft.drawImage(leftFrame, 0, 0, w, h);
+                ctxRight.drawImage(rightFrame, 0, 0, w, h);
+                const tDraw = performance.now();
+
+                // Extract pixel data directly — no getImageData needed
+                const leftBuf = new Uint8ClampedArray(w * h * 4);
+                const rightBuf = new Uint8ClampedArray(w * h * 4);
+                leftFrame.copyTo(leftBuf, { format: 'RGBA' });
+                rightFrame.copyTo(rightBuf, { format: 'RGBA' });
+                const tCopy = performance.now();
+
+                leftFrame.close();
+                rightFrame.close();
+
+                videoState._t0 = t0;
+                videoState._tDraw = tDraw;
+                videoState._tGetImage = tCopy;
+
+                videoState.waiting = true;
+                videoState._tPostMsg = performance.now();
+                worker.postMessage(
+                    {
+                        type: 'compare',
+                        leftRGBA: leftBuf,
+                        rightRGBA: rightBuf,
+                        width: w,
+                        height: h
+                    },
+                    [leftBuf.buffer, rightBuf.buffer]
+                );
+            } else {
+                // Fallback: drawImage + getImageData
+                videoState._useVF = false;
+                ctxLeft.drawImage(leftVideo, 0, 0, w, h);
+                ctxRight.drawImage(rightVideo, 0, 0, w, h);
+                const tDraw = performance.now();
+
+                const leftImg = ctxLeft.getImageData(0, 0, w, h);
+                const rightImg = ctxRight.getImageData(0, 0, w, h);
+                const tGetImage = performance.now();
+
+                videoState._t0 = t0;
+                videoState._tDraw = tDraw;
+                videoState._tGetImage = tGetImage;
+                videoState._tPostMsg = performance.now();
+                videoState.waiting = true;
+                worker.postMessage(
+                    {
+                        type: 'compare',
+                        leftRGBA: leftImg.data,
+                        rightRGBA: rightImg.data,
+                        width: w,
+                        height: h
+                    },
+                    [leftImg.data.buffer, rightImg.data.buffer]
+                );
+            }
+
+            scheduleNextFrame();
+        }
+
+        function handleWorkerResult(data) {
+            const tWorkerDone = performance.now();
+
+            videoState.waiting = false;
+
+            const { ssim, psnr, mse, maxDiff, rgba, width, height } = data;
+
+            // Render diff to canvas
+            const canvasDiff = document.getElementById('canvas-diff');
+            const ctxDiff = canvasDiff.getContext('2d');
+            const diffImg = ctxDiff.createImageData(width, height);
+            diffImg.data.set(rgba);
+            ctxDiff.putImageData(diffImg, 0, 0);
+            const tPutImage = performance.now();
+
+            // Update metrics
+            document.getElementById('ssim-value').textContent = ssim.toFixed(4);
+            document.getElementById('psnr-value').textContent = psnr.toFixed(2);
+            document.getElementById('mse-value').textContent = mse.toFixed(2);
+
+            videoState.frameCount++;
+            videoState.ssimHistory.push(ssim);
+            const avgSsim = videoState.ssimHistory.reduce((a,b) => a+b, 0) / videoState.ssimHistory.length;
+            document.getElementById('avg-ssim').textContent = avgSsim.toFixed(4);
+
+            const leftVideo = document.getElementById('video-left-preview');
+            const elapsed = (performance.now() - videoState.startTime) / 1000;
+            document.getElementById('fps-info').textContent = `FPS: ${(videoState.frameCount / elapsed).toFixed(1)}`;
+            document.getElementById('time-info').textContent = `Time: ${leftVideo.currentTime.toFixed(2)}s`;
+            document.getElementById('frame-info').textContent = `Frame: ${videoState.frameCount}`;
+            document.getElementById('progress-fill').style.width = `${(leftVideo.currentTime / leftVideo.duration) * 100}%`;
+
+            // Draw chart
+            drawChart(
+                document.getElementById('chart-canvas').getContext('2d'),
+                videoState.ssimHistory
+            );
+            const tDone = performance.now();
+
+            // Record per-frame timing breakdown
+            perf.frames.push({
+                draw: +(videoState._tDraw - videoState._t0).toFixed(2),
+                getImage: +(videoState._tGetImage - videoState._tDraw).toFixed(2),
+                postMsg: +(videoState._tPostMsg - videoState._tGetImage).toFixed(2),
+                worker: +(tWorkerDone - videoState._tPostMsg).toFixed(2),
+                putImage: +(tPutImage - tWorkerDone).toFixed(2),
+                dom: +(tDone - tPutImage).toFixed(2),
+                total: +(tDone - videoState._t0).toFixed(2),
+            });
+        }
+
+        window.stopVideoCompare = function() {
+            videoState.playing = false;
+            videoState.waiting = false;
+
+            const leftVideo = document.getElementById('video-left-preview');
+            const rightVideo = document.getElementById('video-right-preview');
+            leftVideo.pause();
+            rightVideo.pause();
+            // Restore video visibility
+            leftVideo.classList.remove('hidden-during-compare');
+            rightVideo.classList.remove('hidden-during-compare');
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('stop-btn').disabled = true;
+        };
+
+        // ====================================================================
+        // Chart drawing
+        // ====================================================================
+
+        function drawChart(ctx, history) {
+            const w = ctx.canvas.offsetWidth || 600;
+            const h = ctx.canvas.offsetHeight || 100;
+            ctx.canvas.width = w;
+            ctx.canvas.height = h;
+
+            ctx.clearRect(0, 0, w, h);
+            if (history.length < 2) return;
+
+            const points = history.slice(-300);
+            const step = w / Math.max(points.length - 1, 1);
+
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let y = 0; y <= 4; y++) {
+                ctx.beginPath();
+                ctx.moveTo(0, (h/4) * y);
+                ctx.lineTo(w, (h/4) * y);
+                ctx.stroke();
+            }
+
+            ctx.strokeStyle = '#28a745';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < points.length; i++) {
+                const x = i * step;
+                const y = h - (points[i] * h);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            ctx.fillStyle = '#666';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('1.0', 5, 10);
+            ctx.fillText('0.5', 5, h/2);
+            ctx.fillText('0.0', 5, h - 5);
+        }
+
+        // Diff to color (for image comparison tab)
+        function diffToColor(diff, maxDiff) {
+            if (maxDiff === 0) return [0, 0, 0];
+            const n = Math.sqrt(Math.min(diff / maxDiff, 1));
+            if (n < 0.25) { const t = n / 0.25; return [0, Math.floor(255 * t), 255]; }
+            else if (n < 0.5) { const t = (n - 0.25) / 0.25; return [0, 255, Math.floor(255 * (1 - t))]; }
+            else if (n < 0.75) { const t = (n - 0.5) / 0.25; return [Math.floor(255 * t), 255, 0]; }
+            else { const t = (n - 0.75) / 0.25; return [255, Math.floor(255 * (1 - t)), 0]; }
+        }
+    </script>
+</body>
+</html>
