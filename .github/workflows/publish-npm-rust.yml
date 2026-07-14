@@ -1,5 +1,6 @@
 # .github/workflows/publish-npm-rust.yml
-# Rust WASM NPM 发布 - 当推送 v* tag 时自动发布到 npm
+# Rust WASM NPM 发布 — 当推送 v* tag 时自动发布到 npm
+# 使用 OIDC provenance（无需 NPM_TOKEN secret）
 
 name: Publish NPM (Rust)
 
@@ -10,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # Required for OIDC provenance
 
 jobs:
   build-and-publish:
@@ -17,6 +19,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
+      id-token: write
       packages: write
 
     steps:
@@ -45,7 +48,7 @@ jobs:
       - name: Update package.json for npm
         working-directory: video-compare-wasm/pkg
         run: |
-          # Read version from tag (e.g., v2.0.0 -> 2.0.0)
+          # Read version from tag (e.g., v2.2.0 -> 2.2.0)
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Publishing version: $VERSION"
 
@@ -59,35 +62,10 @@ jobs:
           echo "Updated package.json:"
           cat package.json
 
-      - name: Setup NPM auth
-        working-directory: video-compare-wasm/pkg
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
-
       - name: Publish to NPM
         working-directory: video-compare-wasm/pkg
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # OIDC provenance — no token needed
+        run: npm publish --provenance --access public
 
       - name: Build summary
         run: |
-          echo "## 🦀 NPM Publish Summary (Rust)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Status**: ✅ Published successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Package** | @cfai/video-compare |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Version** | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Runtime** | Rust WASM |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Package Contents" >> $GITHUB_STEP_SUMMARY
-          ls -lh video-compare-wasm/pkg/*.wasm video-compare-wasm/pkg/*.js >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "**🎉 从 C++ 到 Rust 的华丽转身！**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "```" >> $GITHUB_STEP_SUMMARY
-          echo "npm install @cfai/video-compare@${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "```" >> $GITHUB_STEP_SUMMARY
