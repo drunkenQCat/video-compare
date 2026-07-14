@@ -37,6 +37,7 @@ jobs:
         with:
           # Node 22.14+ 是 Trusted Publishing 最低要求
           node-version: "22"
+          # 注意: 不使用 registry-url 和 scope — OIDC 自动处理认证
 
       - name: Check versions
         run: |
@@ -62,7 +63,7 @@ jobs:
           cat package.json | jq \
             --arg name "@cfai/video-compare" \
             --arg version "$VERSION" \
-            --arg repo "https://github.com/drunkenQCat/video-compare" \
+            --arg repo "git+https://github.com/drunkenQCat/video-compare.git" \
             '.name = $name
             | .version = $version
             | .publishConfig = {"access": "public"}
