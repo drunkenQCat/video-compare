@@ -1,6 +1,7 @@
 # .github/workflows/publish-npm-rust.yml
 # Rust WASM NPM 发布 — 当推送 v* tag 时自动发布到 npm
 # 使用 OIDC provenance（无需 NPM_TOKEN secret）
+# 注意: Node 22.14+ / npm 11.5.1+ 为 Trusted Publishing 最低要求
 
 name: Publish NPM (Rust)
 
@@ -34,9 +35,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-          scope: "@cfai"
+          # Node 22.14+ 是 Trusted Publishing 最低要求
+          node-version: "22"
+
+      - name: Check versions
+        run: |
+          node -v
+          npm -v
 
       - name: Install wasm-pack
         run: cargo install wasm-pack
@@ -53,13 +58,19 @@ jobs:
           echo "Publishing version: $VERSION"
 
           # Update package.json
+          # repository.url 必须精确匹配 GitHub 仓库地址（npm Trusted Publishing 校验）
           cat package.json | jq \
             --arg name "@cfai/video-compare" \
             --arg version "$VERSION" \
-            '.name = $name | .version = $version | .publishConfig = {"access": "public"}' > package.json.tmp
+            --arg repo "https://github.com/drunkenQCat/video-compare" \
+            '.name = $name
+            | .version = $version
+            | .publishConfig = {"access": "public"}
+            | .repository.url = $repo
+            | .repository.type = "git"' > package.json.tmp
           mv package.json.tmp package.json
 
-          echo "Updated package.json:"
+          echo "=== Updated package.json ==="
           cat package.json
 
       - name: Publish to NPM
