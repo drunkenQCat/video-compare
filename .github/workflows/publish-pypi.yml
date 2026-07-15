@@ -39,6 +39,18 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/
+            video-compare-py/target/
+          key: ${{ runner.os }}-cargo-py-${{ hashFiles('video-compare-py/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-py-
+            ${{ runner.os }}-cargo-
+
       - name: Install maturin
         run: pip install maturin
 

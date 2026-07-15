@@ -32,6 +32,18 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/
+            video-compare-wasm/target/
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('video-compare-wasm/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-wasm-
+            ${{ runner.os }}-cargo-
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
