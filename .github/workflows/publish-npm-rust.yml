@@ -57,6 +57,32 @@ jobs:
           node -v
           npm -v
 
+      - name: Upgrade npm to latest
+        run: npm install -g npm@latest
+
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT" | jq '{repository: .repository, workflow: .workflow, ref: .ref, actor: .actor, sha: .sha, run_number: .run_number, run_id: .run_id}'
+
+      - name: Get OIDC JWT claims
+        run: |
+          # Request OIDC token from GitHub
+          OIDC_TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=registry.npmjs.org" | jq -r '.value')
+          
+          # Decode JWT payload (without signature)
+          PAYLOAD=$(echo "$OIDC_TOKEN" | cut -d. -f2)
+          # Base64 decode (add padding)
+          case $((${#PAYLOAD} % 4)) in
+            2) PAYLOAD="${PAYLOAD}==" ;;
+            3) PAYLOAD="${PAYLOAD}=" ;;
+          esac
+          DECODED=$(echo "$PAYLOAD" | base64 -d 2>/dev/null || echo "$PAYLOAD" | openssl base64 -d 2>/dev/null)
+          
+          echo "=== OIDC JWT Claims ==="
+          echo "$DECODED" | jq '{sub, repository, repository_owner, workflow, job_workflow_ref, ref, aud, issuer, sha, run_id}'
+
       - name: Install wasm-pack
         run: cargo install wasm-pack
 
@@ -87,13 +113,24 @@ jobs:
           echo "=== Updated package.json ==="
           cat package.json
 
+      - name: Generate lock file for npm ci
+        working-directory: video-compare-wasm/pkg
+        run: npm install --package-lock-only
+
       - name: Publish to NPM
         working-directory: video-compare-wasm/pkg
         # OIDC provenance — no token needed
         run: |
           npm ci
-          npm run build -if-present
-          npm publish --provenance --access public
+          npm run build --if-present
+          npm publish --provenance --access public --loglevel silly
+
+      - name: Print npm debug logs on failure
+        if: failure()
+        run: |
+          echo "=== npm debug logs ==="
+          find ~/.npm/_logs -type f -print
+          cat ~/.npm/_logs/* 2>/dev/null || echo "No logs found"
 
       - name: Build summary
         run: |
