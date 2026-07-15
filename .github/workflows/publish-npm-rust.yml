@@ -90,7 +90,10 @@ jobs:
       - name: Publish to NPM
         working-directory: video-compare-wasm/pkg
         # OIDC provenance — no token needed
-        run: npm publish --provenance --access public
+        run: |
+          npm ci
+          npm run build -if-present
+          npm publish --provenance --access public
 
       - name: Build summary
         run: |
