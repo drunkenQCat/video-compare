@@ -43,12 +43,16 @@ jobs:
         working-directory: video-compare-py
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Setting version to $VERSION"
-          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
-          sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
-          echo "pyproject.toml:" && grep version pyproject.toml
-          echo "Cargo.toml:" && grep version Cargo.toml
+          set -euo pipefail
+          python - <<'PY'
+          import os, re, pathlib
+          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          print(f"Setting version to {version}")
+          for f in ("pyproject.toml", "Cargo.toml"):
+              p = pathlib.Path(f)
+              p.write_text(re.sub(r'^(version\s*=\s*)"[^"]*"', f'\g<1>"{version}"', p.read_text(), flags=re.M))
+              print(f, "->", [l for l in p.read_text().splitlines() if l.startswith("version")][0])
+          PY
 
       - name: Install maturin
         run: pip install maturin
@@ -80,10 +84,16 @@ jobs:
         working-directory: video-compare-py
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Setting version to $VERSION"
-          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
-          sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+          set -euo pipefail
+          python - <<'PY'
+          import os, re, pathlib
+          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          print(f"Setting version to {version}")
+          for f in ("pyproject.toml", "Cargo.toml"):
+              p = pathlib.Path(f)
+              p.write_text(re.sub(r'^(version\s*=\s*)"[^"]*"', f'\g<1>"{version}"', p.read_text(), flags=re.M))
+              print(f, "->", [l for l in p.read_text().splitlines() if l.startswith("version")][0])
+          PY
 
       - name: Install maturin
         run: pip install maturin
@@ -102,6 +112,8 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: [build-wheels, build-sdist]
+    # 显式保证：前置任意 build 失败或取消时跳过发布（防未来误改）
+    if: success()
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
